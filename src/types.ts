@@ -18,6 +18,7 @@ export type Spot = {
   crowd: CrowdLevel
   buoyStationId?: string
   buoyName?: string
+  webcamUrl?: string
 }
 
 export type BuoyObservation = {
@@ -99,6 +100,25 @@ export type MapFieldPoint = {
   windDirection: number
 }
 
+export type VelocityRecordHeader = {
+  parameterCategory: number
+  parameterNumber: number
+  nx: number
+  ny: number
+  lo1: number
+  la1: number
+  lo2: number
+  la2: number
+  dx: number
+  dy: number
+  refTime: string
+}
+
+export type VelocityRecord = {
+  header: VelocityRecordHeader
+  data: number[]
+}
+
 export type ForecastCollection = {
   generatedAt: string
   source: 'generated'
@@ -106,6 +126,7 @@ export type ForecastCollection = {
   mapField: {
     generatedAt: string
     points: MapFieldPoint[]
+    velocityData: VelocityRecord[]
   }
   research: {
     modelingNotes: string[]

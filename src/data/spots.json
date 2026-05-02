@@ -19,7 +19,8 @@
     "boardHint": "Longboard or midlength",
     "crowd": "High",
     "buoyStationId": "46025",
-    "buoyName": "Santa Monica Basin"
+    "buoyName": "Santa Monica Basin",
+    "webcamUrl": "https://www.malibucity.org/1017/Beach-Cams"
   },
   {
     "id": "trestles",
@@ -59,7 +60,8 @@
     "skill": "Beginner",
     "tideWindow": "Mid tide",
     "boardHint": "Groveler or performance fish",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.surfcityusa.com/webcam/"
   },
   {
     "id": "mavericks",
@@ -121,7 +123,8 @@
     "skill": "Intermediate",
     "tideWindow": "Mid tide",
     "boardHint": "Shortboard or step-up",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.santacruzharbor.org/harbor-webcam"
   },
   {
     "id": "rincon",
@@ -343,7 +346,8 @@
     "skill": "Advanced",
     "tideWindow": "Low tide",
     "boardHint": "Step-up or beachbreak shortboard",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.hossegorcapbreton.com/webcams"
   },
   {
     "id": "mundaka",
@@ -383,7 +387,8 @@
     "skill": "Advanced",
     "tideWindow": "Mid tide",
     "boardHint": "Big-wave gun",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.skylinewebcams.com/en/webcam/portugal/leiria/nazare/nazare-praia.html"
   },
   {
     "id": "supertubos",
@@ -403,7 +408,8 @@
     "skill": "Advanced",
     "tideWindow": "Mid tide",
     "boardHint": "Shortboard",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.surfline.com/surf-cams/peniche-supertubos/c58c1ba9a7b11f4b4b6b3fcb"
   },
   {
     "id": "ericeira",
@@ -443,7 +449,8 @@
     "skill": "Intermediate",
     "tideWindow": "Low to mid tide",
     "boardHint": "Fish or midlength",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.skylinewebcams.com/en/webcam/morocco/souss-massa-draa/taghazout/taghazout-bay.html"
   },
   {
     "id": "skeleton-bay",
@@ -683,7 +690,8 @@
     "skill": "Beginner",
     "tideWindow": "Any tide with light wind",
     "boardHint": "Soft top or everyday shortboard",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.bondisurfcam.com.au/"
   },
   {
     "id": "margaret-river",
@@ -723,7 +731,8 @@
     "skill": "Intermediate",
     "tideWindow": "Mid tide",
     "boardHint": "Longboard or fish",
-    "crowd": "Medium"
+    "crowd": "Medium",
+    "webcamUrl": "https://www.raglan23.co.nz/surf-webcam"
   },
   {
     "id": "taranaki",
@@ -763,7 +772,8 @@
     "skill": "Advanced",
     "tideWindow": "Rising mid tide",
     "boardHint": "Step-up gun",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://explorenorthshore.com/webcams/ehukai-beach-park-cam/"
   },
   {
     "id": "sunset",
@@ -783,7 +793,8 @@
     "skill": "Advanced",
     "tideWindow": "Mid tide",
     "boardHint": "Step-up gun",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://explorenorthshore.com/webcams/sunset-beach-cam/"
   },
   {
     "id": "waimea",
@@ -803,7 +814,8 @@
     "skill": "Advanced",
     "tideWindow": "Mid tide",
     "boardHint": "Big-wave gun",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://explorenorthshore.com/webcams/waimea-bay-cam/"
   },
   {
     "id": "hanalei",
@@ -843,7 +855,8 @@
     "skill": "Intermediate",
     "tideWindow": "Low to mid tide",
     "boardHint": "Shortboard",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.biarritz.fr/webcams"
   },
   {
     "id": "lacanau",
@@ -883,7 +896,8 @@
     "skill": "Intermediate",
     "tideWindow": "Mid tide",
     "boardHint": "Fish or shortboard",
-    "crowd": "High"
+    "crowd": "High",
+    "webcamUrl": "https://www.newquayweatherstation.com/watergatebay/webcam/"
   },
   {
     "id": "bundoran",
@@ -903,7 +917,8 @@
     "skill": "Advanced",
     "tideWindow": "Mid tide",
     "boardHint": "Step-up shortboard",
-    "crowd": "Medium"
+    "crowd": "Medium",
+    "webcamUrl": "https://www.discoverireland.ie/donegal/bundoran-beach-webcam"
   },
   {
     "id": "thurso",

@@ -375,9 +375,8 @@ const buildSpotForecast = async (spot, generatedAt) => {
 
 const buildMapFieldPoints = () => {
   const points = []
-  for (let latitude = -55; latitude <= 55; latitude += 10) {
+  for (let latitude = 60; latitude >= -60; latitude -= 10) {
     for (let longitude = -180; longitude < 180; longitude += 10) {
-      if (Math.abs(latitude) < 8 && Math.abs(longitude) < 20) continue
       points.push({ latitude, longitude })
     }
   }
@@ -451,9 +450,57 @@ const buildMapField = async (generatedAt) => {
     })
   }
 
+  points.sort((a, b) => (b.latitude - a.latitude) || (a.longitude - b.longitude))
+
+  const nx = 36
+  const ny = 13
+  const uData = []
+  const vData = []
+
+  for (const point of points) {
+    const radians = ((point.waveDirection + 180) * Math.PI) / 180
+    const magnitude = Math.max(point.waveHeight * 1.8 + point.wavePeriod * 0.08, 0.05)
+    uData.push(Number((Math.sin(radians) * magnitude).toFixed(3)))
+    vData.push(Number((-Math.cos(radians) * magnitude).toFixed(3)))
+  }
+
   return {
     generatedAt,
     points,
+    velocityData: [
+      {
+        header: {
+          parameterCategory: 2,
+          parameterNumber: 2,
+          nx,
+          ny,
+          lo1: -180,
+          la1: 60,
+          lo2: 170,
+          la2: -60,
+          dx: 10,
+          dy: 10,
+          refTime: generatedAt,
+        },
+        data: uData,
+      },
+      {
+        header: {
+          parameterCategory: 2,
+          parameterNumber: 3,
+          nx,
+          ny,
+          lo1: -180,
+          la1: 60,
+          lo2: 170,
+          la2: -60,
+          dx: 10,
+          dy: 10,
+          refTime: generatedAt,
+        },
+        data: vData,
+      },
+    ],
   }
 }
 

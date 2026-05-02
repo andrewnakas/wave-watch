@@ -11,7 +11,8 @@ It generates a **14-day forecast dataset at build time**, then ships a client ap
 - blends multiple weather forecast solutions for wind/temperature
 - attaches buoy observations where available for quick reality checks
 - exposes the generated forecast JSON directly in the deployed site
-- renders a Leaflet world map with animated particle flow from the blended global wave field
+- renders a Leaflet world map with a Windy-style velocity layer from the blended global wave field
+- includes public webcam links where they are actually available and linkable
 - deploys automatically to GitHub Pages
 - refreshes on a GitHub Actions cron every 6 hours
 
@@ -42,8 +43,9 @@ See `docs/modeling-roadmap.md` for the next iteration path.
 The app now includes:
 
 - a worldwide Leaflet map
-- particle-flow animation from the generated global wave field
+- a Windy-style velocity layer via `leaflet-velocity`
 - 49 globally distributed surf spots in the current catalog
+- public webcam links for a subset of spots with usable public pages today
 
 
 Install dependencies:
