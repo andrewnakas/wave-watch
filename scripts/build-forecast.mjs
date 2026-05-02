@@ -119,7 +119,7 @@ const summarizeDaily = (hourly) => {
   })
 }
 
-const fetchJsonWithRetry = async (url, retries = 3) => {
+const fetchJsonWithRetry = async (url, retries = 5) => {
   let lastError = null
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
@@ -127,13 +127,25 @@ const fetchJsonWithRetry = async (url, retries = 3) => {
         headers: { 'user-agent': 'wave-watch-build/1.0' },
       })
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status} for ${url}`)
+        const retryAfterHeader = response.headers.get('retry-after')
+        const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : null
+        const error = new Error(`HTTP ${response.status} for ${url}`)
+        error.retryAfterMs = Number.isFinite(retryAfterSeconds)
+          ? retryAfterSeconds * 1000
+          : response.status === 429
+            ? 4000 * attempt
+            : null
+        throw error
       }
       return await response.json()
     } catch (error) {
       lastError = error
       if (attempt < retries) {
-        await new Promise((resolve) => setTimeout(resolve, 1000 * attempt))
+        const retryAfterMs =
+          typeof error?.retryAfterMs === 'number' && Number.isFinite(error.retryAfterMs)
+            ? error.retryAfterMs
+            : 1000 * attempt
+        await new Promise((resolve) => setTimeout(resolve, retryAfterMs))
       }
     }
   }
@@ -393,7 +405,30 @@ const chunk = (items, size) => {
 
 const buildMapField = async (generatedAt) => {
   const grid = buildMapFieldPoints()
-  const batches = chunk(grid, 40)
+  const elevationBatches = chunk(grid, 80)
+  const oceanGrid = []
+
+  for (const elevationBatch of elevationBatches) {
+    const elevationUrl = new URL('https://api.open-meteo.com/v1/elevation')
+    elevationUrl.search = new URLSearchParams({
+      latitude: elevationBatch.map((point) => point.latitude).join(','),
+      longitude: elevationBatch.map((point) => point.longitude).join(','),
+    }).toString()
+
+    const elevationResponse = await fetchJsonWithRetry(elevationUrl)
+    const elevations = Array.isArray(elevationResponse?.elevation)
+      ? elevationResponse.elevation
+      : []
+
+    elevationBatch.forEach((point, index) => {
+      const elevation = elevations[index]
+      if (typeof elevation === 'number' && elevation <= 0) {
+        oceanGrid.push(point)
+      }
+    })
+  }
+
+  const batches = chunk(oceanGrid, 20)
   const points = []
 
   for (const batch of batches) {
@@ -452,16 +487,27 @@ const buildMapField = async (generatedAt) => {
 
   points.sort((a, b) => (b.latitude - a.latitude) || (a.longitude - b.longitude))
 
-  const nx = 36
-  const ny = 13
+  const uniqueLons = [...new Set(points.map((point) => point.longitude))].sort((a, b) => a - b)
+  const uniqueLats = [...new Set(points.map((point) => point.latitude))].sort((a, b) => b - a)
+  const nx = uniqueLons.length
+  const ny = uniqueLats.length
+  const pointMap = new Map(points.map((point) => [`${point.latitude},${point.longitude}`, point]))
   const uData = []
   const vData = []
 
-  for (const point of points) {
-    const radians = ((point.waveDirection + 180) * Math.PI) / 180
-    const magnitude = Math.max(point.waveHeight * 1.8 + point.wavePeriod * 0.08, 0.05)
-    uData.push(Number((Math.sin(radians) * magnitude).toFixed(3)))
-    vData.push(Number((-Math.cos(radians) * magnitude).toFixed(3)))
+  for (const latitude of uniqueLats) {
+    for (const longitude of uniqueLons) {
+      const point = pointMap.get(`${latitude},${longitude}`)
+      if (!point) {
+        uData.push(0)
+        vData.push(0)
+        continue
+      }
+      const radians = ((point.waveDirection + 180) * Math.PI) / 180
+      const magnitude = Math.max(point.waveHeight * 1.8 + point.wavePeriod * 0.08, 0.05)
+      uData.push(Number((Math.sin(radians) * magnitude).toFixed(3)))
+      vData.push(Number((-Math.cos(radians) * magnitude).toFixed(3)))
+    }
   }
 
   return {
@@ -474,12 +520,12 @@ const buildMapField = async (generatedAt) => {
           parameterNumber: 2,
           nx,
           ny,
-          lo1: -180,
-          la1: 60,
-          lo2: 170,
-          la2: -60,
-          dx: 10,
-          dy: 10,
+          lo1: uniqueLons[0],
+          la1: uniqueLats[0],
+          lo2: uniqueLons[uniqueLons.length - 1],
+          la2: uniqueLats[uniqueLats.length - 1],
+          dx: uniqueLons.length > 1 ? uniqueLons[1] - uniqueLons[0] : 10,
+          dy: uniqueLats.length > 1 ? Math.abs(uniqueLats[0] - uniqueLats[1]) : 10,
           refTime: generatedAt,
         },
         data: uData,
@@ -490,12 +536,12 @@ const buildMapField = async (generatedAt) => {
           parameterNumber: 3,
           nx,
           ny,
-          lo1: -180,
-          la1: 60,
-          lo2: 170,
-          la2: -60,
-          dx: 10,
-          dy: 10,
+          lo1: uniqueLons[0],
+          la1: uniqueLats[0],
+          lo2: uniqueLons[uniqueLons.length - 1],
+          la2: uniqueLats[uniqueLats.length - 1],
+          dx: uniqueLons.length > 1 ? uniqueLons[1] - uniqueLons[0] : 10,
+          dy: uniqueLats.length > 1 ? Math.abs(uniqueLats[0] - uniqueLats[1]) : 10,
           refTime: generatedAt,
         },
         data: vData,

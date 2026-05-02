@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { ForecastCollection, VelocityRecord } from '../types'
@@ -71,6 +71,8 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
   const mapElementRef = useRef<HTMLDivElement | null>(null)
   const markersLayerRef = useRef<L.LayerGroup | null>(null)
   const velocityLayerRef = useRef<LeafletVelocityLayer | null>(null)
+  const velocityDataRef = useRef<VelocityRecord[]>([])
+  const interactionTimerRef = useRef<number | null>(null)
   const [velocityReady, setVelocityReady] = useState(false)
 
   useEffect(() => {
@@ -121,16 +123,15 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
     }
   }, [])
 
-  useEffect(() => {
+  const mountVelocityLayer = useCallback(() => {
     const map = mapRef.current
     if (!map || !velocityReady || !velocityLeaflet.velocityLayer) return
 
     cleanupVelocityLayer(map, velocityLayerRef.current)
     velocityLayerRef.current = null
 
-    const filteredVelocityData = clampVelocityData(collection.mapField.velocityData)
     const velocityLayer = velocityLeaflet.velocityLayer({
-      data: filteredVelocityData,
+      data: velocityDataRef.current,
       displayValues: false,
       velocityScale: 0.0045,
       opacity: 0.9,
@@ -162,39 +163,41 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
       },
     })
 
-    const removeForInteraction = () => {
-      if (!velocityLayerRef.current) return
-      if (map.hasLayer(velocityLayerRef.current)) {
-        cleanupVelocityLayer(map, velocityLayerRef.current)
-      }
-    }
-
-    const restoreAfterInteraction = () => {
-      if (!velocityLayerRef.current) return
-      if (!map.hasLayer(velocityLayerRef.current)) {
-        velocityLayerRef.current.addTo(map)
-      }
-    }
-
-    map.on('zoomstart', removeForInteraction)
-    map.on('movestart', removeForInteraction)
-    map.on('zoomend', restoreAfterInteraction)
-    map.on('moveend', restoreAfterInteraction)
-
     velocityLayer.addTo(map)
     velocityLayerRef.current = velocityLayer
+  }, [velocityReady])
+
+  useEffect(() => {
+    velocityDataRef.current = clampVelocityData(collection.mapField.velocityData)
+    if (!velocityReady) return
+    mountVelocityLayer()
+  }, [collection.mapField.velocityData, mountVelocityLayer, velocityReady])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !velocityReady) return
+
+    const refreshAfterInteraction = () => {
+      if (interactionTimerRef.current !== null) {
+        window.clearTimeout(interactionTimerRef.current)
+      }
+      interactionTimerRef.current = window.setTimeout(() => {
+        mountVelocityLayer()
+      }, 80)
+    }
+
+    map.on('zoomend', refreshAfterInteraction)
+    map.on('moveend', refreshAfterInteraction)
 
     return () => {
-      map.off('zoomstart', removeForInteraction)
-      map.off('movestart', removeForInteraction)
-      map.off('zoomend', restoreAfterInteraction)
-      map.off('moveend', restoreAfterInteraction)
-      cleanupVelocityLayer(map, velocityLayer)
-      if (velocityLayerRef.current === velocityLayer) {
-        velocityLayerRef.current = null
+      map.off('zoomend', refreshAfterInteraction)
+      map.off('moveend', refreshAfterInteraction)
+      if (interactionTimerRef.current !== null) {
+        window.clearTimeout(interactionTimerRef.current)
+        interactionTimerRef.current = null
       }
     }
-  }, [collection.mapField.velocityData, velocityReady])
+  }, [mountVelocityLayer, velocityReady])
 
   useEffect(() => {
     const layer = markersLayerRef.current
