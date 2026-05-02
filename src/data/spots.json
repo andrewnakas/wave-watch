@@ -6,16 +6,80 @@
     "country": "USA",
     "latitude": 34.0339,
     "longitude": -118.6771,
-    "idealSwellMin": 1,
+    "idealSwellMin": 1.0,
     "idealSwellMax": 2.4,
-    "idealPeriodMin": 11,
-    "offshoreDirections": [35, 45, 55],
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      35,
+      45,
+      55
+    ],
     "skill": "Intermediate",
     "tideWindow": "Mid tide push",
     "boardHint": "Longboard or midlength",
     "crowd": "High",
     "buoyStationId": "46025",
     "buoyName": "Santa Monica Basin"
+  },
+  {
+    "id": "trestles",
+    "name": "Lower Trestles",
+    "region": "California",
+    "country": "USA",
+    "latitude": 33.3847,
+    "longitude": -117.5931,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 2.8,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      40,
+      50,
+      60
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Low to mid tide",
+    "boardHint": "High-performance shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "huntington",
+    "name": "Huntington Beach",
+    "region": "California",
+    "country": "USA",
+    "latitude": 33.655,
+    "longitude": -117.9988,
+    "idealSwellMin": 0.8,
+    "idealSwellMax": 2.2,
+    "idealPeriodMin": 10.0,
+    "offshoreDirections": [
+      40,
+      50,
+      60
+    ],
+    "skill": "Beginner",
+    "tideWindow": "Mid tide",
+    "boardHint": "Groveler or performance fish",
+    "crowd": "High"
+  },
+  {
+    "id": "mavericks",
+    "name": "Mavericks",
+    "region": "California",
+    "country": "USA",
+    "latitude": 37.4944,
+    "longitude": -122.4963,
+    "idealSwellMin": 3.0,
+    "idealSwellMax": 9.0,
+    "idealPeriodMin": 15.0,
+    "offshoreDirections": [
+      60,
+      70,
+      80
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid to high tide",
+    "boardHint": "Big-wave gun",
+    "crowd": "Medium"
   },
   {
     "id": "obsf",
@@ -25,9 +89,13 @@
     "latitude": 37.7594,
     "longitude": -122.5111,
     "idealSwellMin": 1.5,
-    "idealSwellMax": 4,
-    "idealPeriodMin": 14,
-    "offshoreDirections": [60, 70, 80],
+    "idealSwellMax": 4.0,
+    "idealPeriodMin": 14.0,
+    "offshoreDirections": [
+      60,
+      70,
+      80
+    ],
     "skill": "Advanced",
     "tideWindow": "Mid to low tide",
     "boardHint": "Step-up or rounded pin",
@@ -36,16 +104,40 @@
     "buoyName": "San Francisco"
   },
   {
+    "id": "santa-cruz",
+    "name": "Steamer Lane",
+    "region": "California",
+    "country": "USA",
+    "latitude": 36.9514,
+    "longitude": -122.0253,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.0,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      50,
+      60,
+      70
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard or step-up",
+    "crowd": "High"
+  },
+  {
     "id": "rincon",
     "name": "Rincon",
     "region": "Santa Barbara",
     "country": "USA",
     "latitude": 34.3736,
     "longitude": -119.4784,
-    "idealSwellMin": 1,
+    "idealSwellMin": 1.0,
     "idealSwellMax": 2.8,
-    "idealPeriodMin": 12,
-    "offshoreDirections": [20, 30, 40],
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      20,
+      30,
+      40
+    ],
     "skill": "Intermediate",
     "tideWindow": "Low to mid tide",
     "boardHint": "Performance longboard or fish",
@@ -54,19 +146,523 @@
     "buoyName": "East Santa Barbara"
   },
   {
-    "id": "pipeline",
-    "name": "Pipeline",
-    "region": "North Shore",
-    "country": "Hawaii",
-    "latitude": 21.6646,
-    "longitude": -158.0516,
-    "idealSwellMin": 1.8,
-    "idealSwellMax": 4.5,
-    "idealPeriodMin": 13,
-    "offshoreDirections": [170, 180, 190],
+    "id": "puerto-escondido",
+    "name": "Puerto Escondido",
+    "region": "Oaxaca",
+    "country": "Mexico",
+    "latitude": 15.8585,
+    "longitude": -97.0674,
+    "idealSwellMin": 1.5,
+    "idealSwellMax": 6.0,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      330,
+      340,
+      350
+    ],
     "skill": "Advanced",
-    "tideWindow": "Rising mid tide",
-    "boardHint": "Step-up gun",
+    "tideWindow": "Low tide",
+    "boardHint": "Step-up or tube board",
+    "crowd": "High"
+  },
+  {
+    "id": "sayulita",
+    "name": "Sayulita",
+    "region": "Nayarit",
+    "country": "Mexico",
+    "latitude": 20.8698,
+    "longitude": -105.4408,
+    "idealSwellMin": 0.8,
+    "idealSwellMax": 2.0,
+    "idealPeriodMin": 9.0,
+    "offshoreDirections": [
+      70,
+      80,
+      90
+    ],
+    "skill": "Beginner",
+    "tideWindow": "Any tide",
+    "boardHint": "Longboard",
+    "crowd": "High"
+  },
+  {
+    "id": "pavones",
+    "name": "Pavones",
+    "region": "Puntarenas",
+    "country": "Costa Rica",
+    "latitude": 8.4003,
+    "longitude": -83.1368,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 3.5,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      20,
+      30,
+      40
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard or fish",
+    "crowd": "Medium"
+  },
+  {
+    "id": "santa-teresa",
+    "name": "Santa Teresa",
+    "region": "Puntarenas",
+    "country": "Costa Rica",
+    "latitude": 9.6439,
+    "longitude": -85.1685,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 2.8,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      40,
+      50,
+      60
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Everyday shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "popoyo",
+    "name": "Popoyo",
+    "region": "Rivas",
+    "country": "Nicaragua",
+    "latitude": 11.4694,
+    "longitude": -86.1216,
+    "idealSwellMin": 1.1,
+    "idealSwellMax": 3.2,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      60,
+      70,
+      80
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Low to mid tide",
+    "boardHint": "Performance fish",
+    "crowd": "Medium"
+  },
+  {
+    "id": "el-tunco",
+    "name": "El Tunco",
+    "region": "La Libertad",
+    "country": "El Salvador",
+    "latitude": 13.4945,
+    "longitude": -89.3818,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 2.4,
+    "idealPeriodMin": 10.0,
+    "offshoreDirections": [
+      20,
+      30,
+      40
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Fish or shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "chicama",
+    "name": "Chicama",
+    "region": "La Libertad",
+    "country": "Peru",
+    "latitude": -7.7031,
+    "longitude": -79.4409,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 3.5,
+    "idealPeriodMin": 14.0,
+    "offshoreDirections": [
+      90,
+      100,
+      110
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Longboard or midlength",
+    "crowd": "Medium"
+  },
+  {
+    "id": "punta-de-lobos",
+    "name": "Punta de Lobos",
+    "region": "Pichilemu",
+    "country": "Chile",
+    "latitude": -34.4137,
+    "longitude": -72.0345,
+    "idealSwellMin": 1.5,
+    "idealSwellMax": 4.5,
+    "idealPeriodMin": 14.0,
+    "offshoreDirections": [
+      60,
+      70,
+      80
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up shortboard",
+    "crowd": "Medium"
+  },
+  {
+    "id": "jeri",
+    "name": "Jericoacoara",
+    "region": "Ceara",
+    "country": "Brazil",
+    "latitude": -2.7957,
+    "longitude": -40.5145,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 2.8,
+    "idealPeriodMin": 9.0,
+    "offshoreDirections": [
+      230,
+      240,
+      250
+    ],
+    "skill": "Beginner",
+    "tideWindow": "Any tide",
+    "boardHint": "Longboard",
+    "crowd": "Medium"
+  },
+  {
+    "id": "hossegor",
+    "name": "Hossegor",
+    "region": "Landes",
+    "country": "France",
+    "latitude": 43.6654,
+    "longitude": -1.444,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 4.5,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      80,
+      90,
+      100
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Low tide",
+    "boardHint": "Step-up or beachbreak shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "mundaka",
+    "name": "Mundaka",
+    "region": "Basque Country",
+    "country": "Spain",
+    "latitude": 43.4073,
+    "longitude": -2.6988,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 3.2,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      150,
+      160,
+      170
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Tube board",
+    "crowd": "High"
+  },
+  {
+    "id": "nazare",
+    "name": "Nazare",
+    "region": "Leiria",
+    "country": "Portugal",
+    "latitude": 39.6014,
+    "longitude": -9.0707,
+    "idealSwellMin": 2.5,
+    "idealSwellMax": 10.0,
+    "idealPeriodMin": 15.0,
+    "offshoreDirections": [
+      90,
+      100,
+      110
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Big-wave gun",
+    "crowd": "High"
+  },
+  {
+    "id": "supertubos",
+    "name": "Supertubos",
+    "region": "Peniche",
+    "country": "Portugal",
+    "latitude": 39.3558,
+    "longitude": -9.3811,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 4.0,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      30,
+      40,
+      50
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "ericeira",
+    "name": "Ericeira",
+    "region": "Lisbon",
+    "country": "Portugal",
+    "latitude": 38.966,
+    "longitude": -9.417,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.0,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      40,
+      50,
+      60
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard or fish",
+    "crowd": "High"
+  },
+  {
+    "id": "taghazout",
+    "name": "Anchor Point",
+    "region": "Taghazout",
+    "country": "Morocco",
+    "latitude": 30.5444,
+    "longitude": -9.7077,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.2,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      80,
+      90,
+      100
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Low to mid tide",
+    "boardHint": "Fish or midlength",
+    "crowd": "High"
+  },
+  {
+    "id": "skeleton-bay",
+    "name": "Skeleton Bay",
+    "region": "Namibia",
+    "country": "Namibia",
+    "latitude": -24.8302,
+    "longitude": 14.6515,
+    "idealSwellMin": 1.5,
+    "idealSwellMax": 4.5,
+    "idealPeriodMin": 14.0,
+    "offshoreDirections": [
+      90,
+      100,
+      110
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up shortboard",
+    "crowd": "Low"
+  },
+  {
+    "id": "jeffreys-bay",
+    "name": "Jeffreys Bay",
+    "region": "Eastern Cape",
+    "country": "South Africa",
+    "latitude": -34.0506,
+    "longitude": 24.9306,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 3.6,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      280,
+      290,
+      300
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Performance shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "dungeons",
+    "name": "Dungeons",
+    "region": "Cape Town",
+    "country": "South Africa",
+    "latitude": -34.1995,
+    "longitude": 18.3282,
+    "idealSwellMin": 3.0,
+    "idealSwellMax": 8.0,
+    "idealPeriodMin": 15.0,
+    "offshoreDirections": [
+      30,
+      40,
+      50
+    ],
+    "skill": "Advanced",
+    "tideWindow": "High tide",
+    "boardHint": "Big-wave gun",
+    "crowd": "Low"
+  },
+  {
+    "id": "bali-uluwatu",
+    "name": "Uluwatu",
+    "region": "Bali",
+    "country": "Indonesia",
+    "latitude": -8.8296,
+    "longitude": 115.0849,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.8,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      80,
+      90,
+      100
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard or step-up",
+    "crowd": "High"
+  },
+  {
+    "id": "padang-padang",
+    "name": "Padang Padang",
+    "region": "Bali",
+    "country": "Indonesia",
+    "latitude": -8.8113,
+    "longitude": 115.1005,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.5,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      80,
+      90,
+      100
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Tube board",
+    "crowd": "High"
+  },
+  {
+    "id": "canggu",
+    "name": "Canggu",
+    "region": "Bali",
+    "country": "Indonesia",
+    "latitude": -8.6561,
+    "longitude": 115.1304,
+    "idealSwellMin": 0.8,
+    "idealSwellMax": 2.4,
+    "idealPeriodMin": 10.0,
+    "offshoreDirections": [
+      80,
+      90,
+      100
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Fish or longboard",
+    "crowd": "High"
+  },
+  {
+    "id": "cloudbreak",
+    "name": "Cloudbreak",
+    "region": "Tavarua",
+    "country": "Fiji",
+    "latitude": -17.8738,
+    "longitude": 177.1968,
+    "idealSwellMin": 1.5,
+    "idealSwellMax": 5.0,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      70,
+      80,
+      90
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up or gun",
+    "crowd": "Medium"
+  },
+  {
+    "id": "teahupoo",
+    "name": "Teahupoo",
+    "region": "Tahiti",
+    "country": "French Polynesia",
+    "latitude": -17.8335,
+    "longitude": -149.2675,
+    "idealSwellMin": 1.8,
+    "idealSwellMax": 5.0,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      20,
+      30,
+      40
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up or gun",
+    "crowd": "High"
+  },
+  {
+    "id": "snapper-rocks",
+    "name": "Snapper Rocks",
+    "region": "Gold Coast",
+    "country": "Australia",
+    "latitude": -28.1644,
+    "longitude": 153.5483,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 2.8,
+    "idealPeriodMin": 10.0,
+    "offshoreDirections": [
+      250,
+      260,
+      270
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Performance shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "kirra",
+    "name": "Kirra",
+    "region": "Gold Coast",
+    "country": "Australia",
+    "latitude": -28.1649,
+    "longitude": 153.5311,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.0,
+    "idealPeriodMin": 10.0,
+    "offshoreDirections": [
+      250,
+      260,
+      270
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Tube board",
+    "crowd": "High"
+  },
+  {
+    "id": "bells-beach",
+    "name": "Bells Beach",
+    "region": "Victoria",
+    "country": "Australia",
+    "latitude": -38.3696,
+    "longitude": 144.2821,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 4.0,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      330,
+      340,
+      350
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up shortboard",
     "crowd": "High"
   },
   {
@@ -76,13 +672,317 @@
     "country": "Australia",
     "latitude": -33.8908,
     "longitude": 151.2743,
-    "idealSwellMin": 1,
+    "idealSwellMin": 1.0,
     "idealSwellMax": 2.6,
-    "idealPeriodMin": 10,
-    "offshoreDirections": [260, 270, 280],
+    "idealPeriodMin": 10.0,
+    "offshoreDirections": [
+      260,
+      270,
+      280
+    ],
     "skill": "Beginner",
     "tideWindow": "Any tide with light wind",
     "boardHint": "Soft top or everyday shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "margaret-river",
+    "name": "Margaret River",
+    "region": "Western Australia",
+    "country": "Australia",
+    "latitude": -33.9566,
+    "longitude": 114.9925,
+    "idealSwellMin": 1.5,
+    "idealSwellMax": 5.0,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      70,
+      80,
+      90
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up shortboard",
+    "crowd": "Medium"
+  },
+  {
+    "id": "raglan",
+    "name": "Raglan",
+    "region": "Waikato",
+    "country": "New Zealand",
+    "latitude": -37.8009,
+    "longitude": 174.8684,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.4,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      90,
+      100,
+      110
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Longboard or fish",
+    "crowd": "Medium"
+  },
+  {
+    "id": "taranaki",
+    "name": "Fitzroy Beach",
+    "region": "Taranaki",
+    "country": "New Zealand",
+    "latitude": -39.0498,
+    "longitude": 174.1059,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.2,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      120,
+      130,
+      140
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Everyday shortboard",
+    "crowd": "Medium"
+  },
+  {
+    "id": "pipeline",
+    "name": "Pipeline",
+    "region": "North Shore",
+    "country": "USA",
+    "latitude": 21.6646,
+    "longitude": -158.0516,
+    "idealSwellMin": 1.8,
+    "idealSwellMax": 4.5,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      170,
+      180,
+      190
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Rising mid tide",
+    "boardHint": "Step-up gun",
+    "crowd": "High"
+  },
+  {
+    "id": "sunset",
+    "name": "Sunset Beach",
+    "region": "North Shore",
+    "country": "USA",
+    "latitude": 21.6794,
+    "longitude": -158.0418,
+    "idealSwellMin": 1.8,
+    "idealSwellMax": 5.5,
+    "idealPeriodMin": 14.0,
+    "offshoreDirections": [
+      170,
+      180,
+      190
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up gun",
+    "crowd": "High"
+  },
+  {
+    "id": "waimea",
+    "name": "Waimea Bay",
+    "region": "North Shore",
+    "country": "USA",
+    "latitude": 21.6398,
+    "longitude": -158.0658,
+    "idealSwellMin": 3.0,
+    "idealSwellMax": 10.0,
+    "idealPeriodMin": 15.0,
+    "offshoreDirections": [
+      170,
+      180,
+      190
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Big-wave gun",
+    "crowd": "High"
+  },
+  {
+    "id": "hanalei",
+    "name": "Hanalei Bay",
+    "region": "Kauai",
+    "country": "USA",
+    "latitude": 22.2059,
+    "longitude": -159.5003,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.2,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      150,
+      160,
+      170
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Longboard or fish",
+    "crowd": "Medium"
+  },
+  {
+    "id": "biarritz",
+    "name": "Cote des Basques",
+    "region": "Biarritz",
+    "country": "France",
+    "latitude": 43.4765,
+    "longitude": -1.5672,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.5,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      100,
+      110,
+      120
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Low to mid tide",
+    "boardHint": "Shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "lacanau",
+    "name": "Lacanau",
+    "region": "Gironde",
+    "country": "France",
+    "latitude": 44.9905,
+    "longitude": -1.2038,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.8,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      90,
+      100,
+      110
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "fistral",
+    "name": "Fistral Beach",
+    "region": "Cornwall",
+    "country": "UK",
+    "latitude": 50.4156,
+    "longitude": -5.1033,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.4,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      90,
+      100,
+      110
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Fish or shortboard",
+    "crowd": "High"
+  },
+  {
+    "id": "bundoran",
+    "name": "Bundoran Peak",
+    "region": "Donegal",
+    "country": "Ireland",
+    "latitude": 54.4788,
+    "longitude": -8.2817,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 4.2,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      110,
+      120,
+      130
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up shortboard",
+    "crowd": "Medium"
+  },
+  {
+    "id": "thurso",
+    "name": "Thurso East",
+    "region": "Scotland",
+    "country": "UK",
+    "latitude": 58.5952,
+    "longitude": -3.5191,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 4.5,
+    "idealPeriodMin": 13.0,
+    "offshoreDirections": [
+      220,
+      230,
+      240
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Shortboard",
+    "crowd": "Medium"
+  },
+  {
+    "id": "lofoten",
+    "name": "Unstad",
+    "region": "Lofoten",
+    "country": "Norway",
+    "latitude": 68.2672,
+    "longitude": 13.5769,
+    "idealSwellMin": 1.0,
+    "idealSwellMax": 3.5,
+    "idealPeriodMin": 11.0,
+    "offshoreDirections": [
+      100,
+      110,
+      120
+    ],
+    "skill": "Intermediate",
+    "tideWindow": "Mid tide",
+    "boardHint": "Cold-water shortboard",
+    "crowd": "Low"
+  },
+  {
+    "id": "reykjanes",
+    "name": "Thorli",
+    "region": "Reykjanes",
+    "country": "Iceland",
+    "latitude": 63.854,
+    "longitude": -22.688,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 4.2,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      30,
+      40,
+      50
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Cold-water shortboard",
+    "crowd": "Low"
+  },
+  {
+    "id": "impossibles",
+    "name": "Impossibles",
+    "region": "Bali",
+    "country": "Indonesia",
+    "latitude": -8.8039,
+    "longitude": 115.1172,
+    "idealSwellMin": 1.2,
+    "idealSwellMax": 4.0,
+    "idealPeriodMin": 12.0,
+    "offshoreDirections": [
+      80,
+      90,
+      100
+    ],
+    "skill": "Advanced",
+    "tideWindow": "Mid tide",
+    "boardHint": "Step-up shortboard",
     "crowd": "High"
   }
 ]

@@ -201,7 +201,68 @@ const fetchBuoyObservation = async (spot) => {
   }
 }
 
-const buildSpotForecast = async (spot) => {
+const blendWaveAndWeather = ({ marine, weather, index }) => {
+  const waveEntries = waveModels.map((model) => ({
+    ...model,
+    waveHeight: safeNumber(marine.hourly[`wave_height_${model.key}`]?.[index]),
+    wavePeriod: safeNumber(marine.hourly[`wave_period_${model.key}`]?.[index]),
+    waveDirection: safeNumber(marine.hourly[`wave_direction_${model.key}`]?.[index]),
+    swellWaveHeight: safeNumber(marine.hourly[`swell_wave_height_${model.key}`]?.[index]),
+    windWaveHeight: safeNumber(marine.hourly[`wind_wave_height_${model.key}`]?.[index]),
+    waterTemperature: safeNumber(marine.hourly[`sea_surface_temperature_${model.key}`]?.[index]),
+  }))
+
+  const weatherEntries = weatherModels.map((model) => ({
+    ...model,
+    windSpeed: safeNumber(weather.hourly[`wind_speed_10m_${model.key}`]?.[index]),
+    windDirection: safeNumber(weather.hourly[`wind_direction_10m_${model.key}`]?.[index]),
+    airTemperature: safeNumber(weather.hourly[`temperature_2m_${model.key}`]?.[index]),
+  }))
+
+  const waveHeight = weightedAverage(
+    waveEntries.map((entry) => ({ value: entry.waveHeight, weight: entry.weight })),
+  )
+  const wavePeriod = weightedAverage(
+    waveEntries.map((entry) => ({ value: entry.wavePeriod, weight: entry.weight })),
+  )
+  const waveDirection = weightedDirection(
+    waveEntries.map((entry) => ({ value: entry.waveDirection, weight: entry.weight })),
+  )
+  const swellWaveHeight = weightedAverage(
+    waveEntries.map((entry) => ({ value: entry.swellWaveHeight, weight: entry.weight })),
+  )
+  const windWaveHeight = weightedAverage(
+    waveEntries.map((entry) => ({ value: entry.windWaveHeight, weight: entry.weight })),
+  )
+  const waterTemperature = weightedAverage(
+    waveEntries.map((entry) => ({ value: entry.waterTemperature, weight: entry.weight })),
+  )
+  const windSpeed = weightedAverage(
+    weatherEntries.map((entry) => ({ value: entry.windSpeed, weight: entry.weight })),
+  )
+  const windDirection = weightedDirection(
+    weatherEntries.map((entry) => ({ value: entry.windDirection, weight: entry.weight })),
+  )
+  const airTemperature = weightedAverage(
+    weatherEntries.map((entry) => ({ value: entry.airTemperature, weight: entry.weight })),
+  )
+
+  return {
+    waveEntries,
+    weatherEntries,
+    waveHeight,
+    wavePeriod,
+    waveDirection,
+    swellWaveHeight,
+    windWaveHeight,
+    waterTemperature,
+    windSpeed,
+    windDirection,
+    airTemperature,
+  }
+}
+
+const buildSpotForecast = async (spot, generatedAt) => {
   const marineUrl = new URL(marineBase)
   marineUrl.search = new URLSearchParams({
     latitude: String(spot.latitude),
@@ -235,50 +296,20 @@ const buildSpotForecast = async (spot) => {
   }
 
   const hourly = times.map((time, index) => {
-    const waveEntries = waveModels.map((model) => ({
-      ...model,
-      waveHeight: safeNumber(marine.hourly[`wave_height_${model.key}`]?.[index]),
-      wavePeriod: safeNumber(marine.hourly[`wave_period_${model.key}`]?.[index]),
-      waveDirection: safeNumber(marine.hourly[`wave_direction_${model.key}`]?.[index]),
-      swellWaveHeight: safeNumber(marine.hourly[`swell_wave_height_${model.key}`]?.[index]),
-      windWaveHeight: safeNumber(marine.hourly[`wind_wave_height_${model.key}`]?.[index]),
-      waterTemperature: safeNumber(marine.hourly[`sea_surface_temperature_${model.key}`]?.[index]),
-    }))
-
-    const weatherEntries = weatherModels.map((model) => ({
-      ...model,
-      windSpeed: safeNumber(weather.hourly[`wind_speed_10m_${model.key}`]?.[index]),
-      windDirection: safeNumber(weather.hourly[`wind_direction_10m_${model.key}`]?.[index]),
-      airTemperature: safeNumber(weather.hourly[`temperature_2m_${model.key}`]?.[index]),
-    }))
-
-    const waveHeight = weightedAverage(
-      waveEntries.map((entry) => ({ value: entry.waveHeight, weight: entry.weight })),
-    )
-    const wavePeriod = weightedAverage(
-      waveEntries.map((entry) => ({ value: entry.wavePeriod, weight: entry.weight })),
-    )
-    const waveDirection = weightedDirection(
-      waveEntries.map((entry) => ({ value: entry.waveDirection, weight: entry.weight })),
-    )
-    const swellWaveHeight = weightedAverage(
-      waveEntries.map((entry) => ({ value: entry.swellWaveHeight, weight: entry.weight })),
-    )
-    const windWaveHeight = weightedAverage(
-      waveEntries.map((entry) => ({ value: entry.windWaveHeight, weight: entry.weight })),
-    )
-    const waterTemperature = weightedAverage(
-      waveEntries.map((entry) => ({ value: entry.waterTemperature, weight: entry.weight })),
-    )
-    const windSpeed = weightedAverage(
-      weatherEntries.map((entry) => ({ value: entry.windSpeed, weight: entry.weight })),
-    )
-    const windDirection = weightedDirection(
-      weatherEntries.map((entry) => ({ value: entry.windDirection, weight: entry.weight })),
-    )
-    const airTemperature = weightedAverage(
-      weatherEntries.map((entry) => ({ value: entry.airTemperature, weight: entry.weight })),
-    )
+    const blend = blendWaveAndWeather({ marine, weather, index })
+    const {
+      waveEntries,
+      weatherEntries,
+      waveHeight,
+      wavePeriod,
+      waveDirection,
+      swellWaveHeight,
+      windWaveHeight,
+      waterTemperature,
+      windSpeed,
+      windDirection,
+      airTemperature,
+    } = blend
 
     if (
       waveHeight === null ||
@@ -294,9 +325,7 @@ const buildSpotForecast = async (spot) => {
     const heightSpread = stdev(waveEntries.map((entry) => entry.waveHeight))
     const periodSpread = stdev(waveEntries.map((entry) => entry.wavePeriod))
     const modelSpread = Number((heightSpread + periodSpread * 0.12).toFixed(2))
-    const confidence = Math.round(
-      clamp(100 - heightSpread * 18 - periodSpread * 4, 30, 98),
-    )
+    const confidence = Math.round(clamp(100 - heightSpread * 18 - periodSpread * 4, 30, 98))
 
     const point = {
       time,
@@ -311,21 +340,6 @@ const buildSpotForecast = async (spot) => {
       windWaveHeight: windWaveHeight === null ? null : Number(windWaveHeight.toFixed(2)),
       confidence,
       modelSpread,
-      models: [
-        ...waveEntries.map((entry) => ({
-          key: entry.key,
-          label: entry.label,
-          waveHeight: entry.waveHeight,
-          wavePeriod: entry.wavePeriod,
-          waveDirection: entry.waveDirection,
-        })),
-        ...weatherEntries.map((entry) => ({
-          key: entry.key,
-          label: entry.label,
-          windSpeed: entry.windSpeed,
-          windDirection: entry.windDirection,
-        })),
-      ],
     }
 
     return {
@@ -340,8 +354,8 @@ const buildSpotForecast = async (spot) => {
   return {
     spot,
     source: 'generated',
-    updatedAt: new Date().toISOString(),
-    generatedAt: new Date().toISOString(),
+    updatedAt: generatedAt,
+    generatedAt,
     current,
     nextBestWindow,
     hourly,
@@ -359,20 +373,107 @@ const buildSpotForecast = async (spot) => {
   }
 }
 
+const buildMapFieldPoints = () => {
+  const points = []
+  for (let latitude = -55; latitude <= 55; latitude += 10) {
+    for (let longitude = -180; longitude < 180; longitude += 10) {
+      if (Math.abs(latitude) < 8 && Math.abs(longitude) < 20) continue
+      points.push({ latitude, longitude })
+    }
+  }
+  return points
+}
+
+const chunk = (items, size) => {
+  const out = []
+  for (let index = 0; index < items.length; index += size) {
+    out.push(items.slice(index, index + size))
+  }
+  return out
+}
+
+const buildMapField = async (generatedAt) => {
+  const grid = buildMapFieldPoints()
+  const batches = chunk(grid, 40)
+  const points = []
+
+  for (const batch of batches) {
+    const marineUrl = new URL(marineBase)
+    marineUrl.search = new URLSearchParams({
+      latitude: batch.map((point) => point.latitude).join(','),
+      longitude: batch.map((point) => point.longitude).join(','),
+      hourly: 'wave_height,wave_period,wave_direction',
+      forecast_days: '1',
+      timezone: 'UTC',
+      models: waveModels.map((model) => model.key).join(','),
+    }).toString()
+
+    const weatherUrl = new URL(weatherBase)
+    weatherUrl.search = new URLSearchParams({
+      latitude: batch.map((point) => point.latitude).join(','),
+      longitude: batch.map((point) => point.longitude).join(','),
+      hourly: 'wind_speed_10m,wind_direction_10m',
+      forecast_days: '1',
+      timezone: 'UTC',
+      models: weatherModels.map((model) => model.key).join(','),
+    }).toString()
+
+    const [marineBatch, weatherBatch] = await Promise.all([
+      fetchJsonWithRetry(marineUrl),
+      fetchJsonWithRetry(weatherUrl),
+    ])
+
+    const marineList = Array.isArray(marineBatch) ? marineBatch : [marineBatch]
+    const weatherList = Array.isArray(weatherBatch) ? weatherBatch : [weatherBatch]
+
+    marineList.forEach((marine, index) => {
+      const weather = weatherList[index]
+      if (!marine?.hourly?.time?.length || !weather?.hourly?.time?.length) return
+      const blend = blendWaveAndWeather({ marine, weather, index: 0 })
+      if (
+        blend.waveHeight === null ||
+        blend.wavePeriod === null ||
+        blend.waveDirection === null ||
+        blend.windSpeed === null ||
+        blend.windDirection === null
+      ) {
+        return
+      }
+      points.push({
+        latitude: batch[index].latitude,
+        longitude: batch[index].longitude,
+        waveHeight: Number(blend.waveHeight.toFixed(2)),
+        wavePeriod: Number(blend.wavePeriod.toFixed(2)),
+        waveDirection: Number(blend.waveDirection.toFixed(0)),
+        windSpeed: Number(blend.windSpeed.toFixed(1)),
+        windDirection: Number(blend.windDirection.toFixed(0)),
+      })
+    })
+  }
+
+  return {
+    generatedAt,
+    points,
+  }
+}
+
 const main = async () => {
   const spots = JSON.parse(await readFile(spotsPath, 'utf8'))
+  const generatedAt = new Date().toISOString()
   const spotForecasts = []
 
   for (const spot of spots) {
-    // serialize to avoid rate bursts and make failures easier to read
-    const forecast = await buildSpotForecast(spot)
+    const forecast = await buildSpotForecast(spot, generatedAt)
     spotForecasts.push(forecast)
   }
 
+  const mapField = await buildMapField(generatedAt)
+
   const payload = {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     source: 'generated',
     spots: spotForecasts,
+    mapField,
     research: {
       modelingNotes: [
         'Current production blend is deterministic and weighted by model trust plus consensus spread.',
@@ -389,7 +490,7 @@ const main = async () => {
   }
 
   await mkdir(outputDir, { recursive: true })
-  await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`)
+  await writeFile(outputPath, `${JSON.stringify(payload)}\n`)
   console.log(`Wrote ${outputPath}`)
 }
 

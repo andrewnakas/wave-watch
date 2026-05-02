@@ -58,7 +58,6 @@ export type HourPoint = {
   score: number
   confidence: number
   modelSpread: number
-  models: ModelInstant[]
 }
 
 export type DaySummary = {
@@ -90,10 +89,24 @@ export type ForecastPayload = {
   }
 }
 
+export type MapFieldPoint = {
+  latitude: number
+  longitude: number
+  waveHeight: number
+  waveDirection: number
+  wavePeriod: number
+  windSpeed: number
+  windDirection: number
+}
+
 export type ForecastCollection = {
   generatedAt: string
   source: 'generated'
   spots: ForecastPayload[]
+  mapField: {
+    generatedAt: string
+    points: MapFieldPoint[]
+  }
   research: {
     modelingNotes: string[]
     analysisDataSources: string[]

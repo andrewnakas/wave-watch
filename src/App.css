@@ -98,6 +98,11 @@ button {
   color: #f3fbff;
 }
 
+.app-main {
+  display: grid;
+  gap: 20px;
+}
+
 .layout-grid {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;
@@ -322,6 +327,58 @@ button {
   background: linear-gradient(135deg, rgba(87, 197, 255, 0.18), rgba(87, 197, 255, 0.05));
 }
 
+.world-panel {
+  overflow: hidden;
+}
+
+.world-panel-meta,
+.world-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #b7cadd;
+  margin-bottom: 14px;
+}
+
+.world-map-wrap {
+  position: relative;
+  height: 420px;
+  border-radius: 24px;
+  overflow: hidden;
+  background: rgba(7, 20, 33, 0.9);
+}
+
+.world-map,
+.world-map-overlay {
+  position: absolute;
+  inset: 0;
+}
+
+.world-map-overlay {
+  pointer-events: none;
+  z-index: 450;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+.legend-dot.epic {
+  background: #00e0a4;
+}
+
+.legend-dot.fun {
+  background: #76d6ff;
+}
+
+.legend-dot.fair {
+  background: #f2a65a;
+}
+
 .empty-state {
   display: grid;
   place-items: center;
@@ -350,12 +407,18 @@ button {
 
   .topbar,
   .hero-title-row,
-  .panel-header {
+  .panel-header,
+  .world-panel-meta,
+  .world-legend {
     flex-direction: column;
   }
 
   .layout-grid {
     grid-template-columns: 1fr;
+  }
+
+  .world-map-wrap {
+    height: 340px;
   }
 
   .stat-grid,

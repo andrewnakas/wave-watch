@@ -6,11 +6,12 @@ It generates a **14-day forecast dataset at build time**, then ships a client ap
 
 ## What it does
 
-- builds a 14-day forecast for curated surf spots
+- builds a 14-day forecast for a broad global surf spot catalog
 - blends multiple public wave forecast solutions
 - blends multiple weather forecast solutions for wind/temperature
 - attaches buoy observations where available for quick reality checks
 - exposes the generated forecast JSON directly in the deployed site
+- renders a Leaflet world map with animated particle flow from the blended global wave field
 - deploys automatically to GitHub Pages
 - refreshes on a GitHub Actions cron every 6 hours
 
@@ -38,6 +39,13 @@ See `docs/modeling-roadmap.md` for the next iteration path.
 
 ## Local development
 
+The app now includes:
+
+- a worldwide Leaflet map
+- particle-flow animation from the generated global wave field
+- 49 globally distributed surf spots in the current catalog
+
+
 Install dependencies:
 
 ```bash
@@ -62,9 +70,17 @@ npm run dev
 npm run build
 ```
 
+That command builds the app from the existing generated dataset.
+
+To force a fresh forecast rebuild and then build the site:
+
+```bash
+npm run build:full
+```
+
 That command:
 
-1. fetches live forecast data
+1. fetches fresh live forecast data
 2. generates `public/data/forecast-data.json`
 3. builds the Vite app for GitHub Pages
 
@@ -75,7 +91,7 @@ The workflow in `.github/workflows/pages.yml`:
 - runs on pushes to `main`
 - runs manually via `workflow_dispatch`
 - reruns every 6 hours via cron
-- rebuilds forecast data and redeploys the Pages site
+- rebuilds forecast data and redeploys the Pages site with `npm run build:full`
 
 ## Important note
 

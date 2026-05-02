@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import './App.css'
+import { WorldMap } from './components/WorldMap'
 import { spots } from './data/spots'
 import {
   describeScore,
@@ -117,14 +118,23 @@ function App() {
         </div>
       </header>
 
-      <main className="layout-grid">
-        <aside className="panel sidebar-panel">
+      <main className="app-main">
+        {collection ? (
+          <WorldMap
+            collection={collection}
+            selectedSpotId={selectedSpotId}
+            onSelectSpot={setSelectedSpotId}
+          />
+        ) : null}
+
+        <div className="layout-grid">
+          <aside className="panel sidebar-panel">
           <div className="panel-header">
             <div>
               <p className="eyebrow">Spots</p>
               <h2>Forecast set</h2>
             </div>
-            <span className="muted-text">{favoriteSpots.length} saved</span>
+            <span className="muted-text">{spots.length} spots · {favoriteSpots.length} saved</span>
           </div>
 
           <div className="spot-list">
@@ -324,7 +334,7 @@ function App() {
               <p>
                 {forecast?.buoy
                   ? `${forecast.buoy.stationName ?? forecast.buoy.stationId} · observed ${new Date(forecast.buoy.observedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
-                  : 'Add more nearshore truth data next.'}
+                  : 'Global spot coverage is live; next step is more nearshore truth data.'}
               </p>
             </article>
             <article className="insight-card">
@@ -336,6 +346,7 @@ function App() {
             </article>
           </div>
         </aside>
+        </div>
       </main>
     </div>
   )

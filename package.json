@@ -6,16 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build:data": "node scripts/build-forecast.mjs",
-    "build": "npm run build:data && tsc -b && vite build",
+    "build": "tsc -b && vite build",
+    "build:full": "FORCE_REFRESH=1 npm run build:data && npm run build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
