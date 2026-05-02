@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { ForecastCollection, VelocityRecord } from '../types'
@@ -59,7 +59,7 @@ const cleanupVelocityLayer = (map: L.Map | null, layer: LeafletVelocityLayer | n
   try {
     map.removeLayer(layer)
   } catch {
-    // ignore cleanup issues from third-party layer internals
+    // ignore third-party cleanup errors
   }
   if (layer._container) {
     layer._container.remove()
@@ -71,6 +71,29 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
   const mapElementRef = useRef<HTMLDivElement | null>(null)
   const markersLayerRef = useRef<L.LayerGroup | null>(null)
   const velocityLayerRef = useRef<LeafletVelocityLayer | null>(null)
+  const [velocityReady, setVelocityReady] = useState(false)
+
+  useEffect(() => {
+    let active = true
+
+    const initVelocity = async () => {
+      ;(globalThis as { L?: typeof L }).L = L
+      try {
+        await import('leaflet-velocity')
+      } catch {
+        // ignore; readiness check below will stay false
+      }
+      if (active) {
+        setVelocityReady(Boolean((L as LeafletWithVelocity).velocityLayer))
+      }
+    }
+
+    void initVelocity()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return
@@ -100,7 +123,7 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
 
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !velocityLeaflet.velocityLayer) return
+    if (!map || !velocityReady || !velocityLeaflet.velocityLayer) return
 
     cleanupVelocityLayer(map, velocityLayerRef.current)
     velocityLayerRef.current = null
@@ -171,7 +194,7 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
         velocityLayerRef.current = null
       }
     }
-  }, [collection.mapField.velocityData])
+  }, [collection.mapField.velocityData, velocityReady])
 
   useEffect(() => {
     const layer = markersLayerRef.current
@@ -215,7 +238,10 @@ export function WorldMap({ collection, selectedSpotId, onSelectSpot }: Props) {
           <p className="eyebrow">World map</p>
           <h2>Wave flow particles</h2>
         </div>
-        <span className="muted-text">{totalSpots} spots · {withWebcams} webcam links</span>
+        <span className="muted-text">
+          {totalSpots} spots · {withWebcams} webcam links
+          {!velocityReady ? ' · loading velocity' : ''}
+        </span>
       </div>
 
       <div className="world-panel-meta">
