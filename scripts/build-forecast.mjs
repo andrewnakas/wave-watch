@@ -274,34 +274,7 @@ const blendWaveAndWeather = ({ marine, weather, index }) => {
   }
 }
 
-const buildSpotForecast = async (spot, generatedAt) => {
-  const marineUrl = new URL(marineBase)
-  marineUrl.search = new URLSearchParams({
-    latitude: String(spot.latitude),
-    longitude: String(spot.longitude),
-    hourly:
-      'wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature',
-    forecast_days: '14',
-    timezone: 'UTC',
-    models: waveModels.map((model) => model.key).join(','),
-  }).toString()
-
-  const weatherUrl = new URL(weatherBase)
-  weatherUrl.search = new URLSearchParams({
-    latitude: String(spot.latitude),
-    longitude: String(spot.longitude),
-    hourly: 'wind_speed_10m,wind_direction_10m,temperature_2m',
-    forecast_days: '14',
-    timezone: 'UTC',
-    models: weatherModels.map((model) => model.key).join(','),
-  }).toString()
-
-  const [marine, weather, buoy] = await Promise.all([
-    fetchJsonWithRetry(marineUrl),
-    fetchJsonWithRetry(weatherUrl),
-    fetchBuoyObservation(spot),
-  ])
-
+const buildSpotForecastFromResponses = ({ spot, marine, weather, buoy, generatedAt }) => {
   const times = marine?.hourly?.time
   if (!Array.isArray(times) || !times.length) {
     throw new Error(`No marine forecast returned for ${spot.name}`)
@@ -311,7 +284,6 @@ const buildSpotForecast = async (spot, generatedAt) => {
     const blend = blendWaveAndWeather({ marine, weather, index })
     const {
       waveEntries,
-      weatherEntries,
       waveHeight,
       wavePeriod,
       waveDirection,
@@ -385,6 +357,65 @@ const buildSpotForecast = async (spot, generatedAt) => {
   }
 }
 
+const buildSpotForecasts = async (spots, generatedAt) => {
+  const buoyPromises = new Map(spots.map((spot) => [spot.id, fetchBuoyObservation(spot)]))
+  const forecastPayloads = []
+
+  for (const batch of chunk(spots, 10)) {
+    const marineUrl = new URL(marineBase)
+    marineUrl.search = new URLSearchParams({
+      latitude: batch.map((spot) => String(spot.latitude)).join(','),
+      longitude: batch.map((spot) => String(spot.longitude)).join(','),
+      hourly:
+        'wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature',
+      forecast_days: '14',
+      timezone: 'UTC',
+      models: waveModels.map((model) => model.key).join(','),
+    }).toString()
+
+    const weatherUrl = new URL(weatherBase)
+    weatherUrl.search = new URLSearchParams({
+      latitude: batch.map((spot) => String(spot.latitude)).join(','),
+      longitude: batch.map((spot) => String(spot.longitude)).join(','),
+      hourly: 'wind_speed_10m,wind_direction_10m,temperature_2m',
+      forecast_days: '14',
+      timezone: 'UTC',
+      models: weatherModels.map((model) => model.key).join(','),
+    }).toString()
+
+    const [marineResponse, weatherResponse] = await Promise.all([
+      fetchJsonWithRetry(marineUrl),
+      fetchJsonWithRetry(weatherUrl),
+    ])
+
+    const marineList = Array.isArray(marineResponse) ? marineResponse : [marineResponse]
+    const weatherList = Array.isArray(weatherResponse) ? weatherResponse : [weatherResponse]
+
+    for (const [index, spot] of batch.entries()) {
+      const marine = marineList[index]
+      const weather = weatherList[index]
+      const buoy = await buoyPromises.get(spot.id)
+      try {
+        forecastPayloads.push(
+          buildSpotForecastFromResponses({
+            spot,
+            marine,
+            weather,
+            buoy,
+            generatedAt,
+          }),
+        )
+      } catch (error) {
+        console.warn(`Skipping ${spot.name}: ${error instanceof Error ? error.message : 'invalid forecast data'}`)
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 400))
+  }
+
+  return forecastPayloads
+}
+
 const buildMapFieldPoints = () => {
   const points = []
   for (let latitude = 60; latitude >= -60; latitude -= 10) {
@@ -428,7 +459,7 @@ const buildMapField = async (generatedAt) => {
     })
   }
 
-  const batches = chunk(oceanGrid, 20)
+  const batches = chunk(oceanGrid, 12)
   const points = []
 
   for (const batch of batches) {
@@ -461,6 +492,8 @@ const buildMapField = async (generatedAt) => {
     const weatherList = Array.isArray(weatherBatch) ? weatherBatch : [weatherBatch]
 
     marineList.forEach((marine, index) => {
+      const pointDef = batch[index]
+      if (!pointDef) return
       const weather = weatherList[index]
       if (!marine?.hourly?.time?.length || !weather?.hourly?.time?.length) return
       const blend = blendWaveAndWeather({ marine, weather, index: 0 })
@@ -474,8 +507,8 @@ const buildMapField = async (generatedAt) => {
         return
       }
       points.push({
-        latitude: batch[index].latitude,
-        longitude: batch[index].longitude,
+        latitude: pointDef.latitude,
+        longitude: pointDef.longitude,
         waveHeight: Number(blend.waveHeight.toFixed(2)),
         wavePeriod: Number(blend.wavePeriod.toFixed(2)),
         waveDirection: Number(blend.waveDirection.toFixed(0)),
@@ -483,30 +516,76 @@ const buildMapField = async (generatedAt) => {
         windDirection: Number(blend.windDirection.toFixed(0)),
       })
     })
+
+    await new Promise((resolve) => setTimeout(resolve, 250))
   }
 
   points.sort((a, b) => (b.latitude - a.latitude) || (a.longitude - b.longitude))
 
-  const uniqueLons = [...new Set(points.map((point) => point.longitude))].sort((a, b) => a - b)
-  const uniqueLats = [...new Set(points.map((point) => point.latitude))].sort((a, b) => b - a)
-  const nx = uniqueLons.length
-  const ny = uniqueLats.length
+  const coarseLons = [...new Set(grid.map((point) => point.longitude))].sort((a, b) => a - b)
+  const coarseLats = [...new Set(grid.map((point) => point.latitude))].sort((a, b) => b - a)
   const pointMap = new Map(points.map((point) => [`${point.latitude},${point.longitude}`, point]))
-  const uData = []
-  const vData = []
+  const coarseU = []
+  const coarseV = []
 
-  for (const latitude of uniqueLats) {
-    for (const longitude of uniqueLons) {
+  for (const latitude of coarseLats) {
+    for (const longitude of coarseLons) {
       const point = pointMap.get(`${latitude},${longitude}`)
       if (!point) {
-        uData.push(0)
-        vData.push(0)
+        coarseU.push(0)
+        coarseV.push(0)
         continue
       }
       const radians = ((point.waveDirection + 180) * Math.PI) / 180
       const magnitude = Math.max(point.waveHeight * 1.8 + point.wavePeriod * 0.08, 0.05)
-      uData.push(Number((Math.sin(radians) * magnitude).toFixed(3)))
-      vData.push(Number((-Math.cos(radians) * magnitude).toFixed(3)))
+      coarseU.push(Number((Math.sin(radians) * magnitude).toFixed(3)))
+      coarseV.push(Number((-Math.cos(radians) * magnitude).toFixed(3)))
+    }
+  }
+
+  const fineStep = 2
+  const fineLons = []
+  const fineLats = []
+  for (let longitude = coarseLons[0]; longitude <= coarseLons[coarseLons.length - 1]; longitude += fineStep) {
+    fineLons.push(longitude)
+  }
+  for (let latitude = coarseLats[0]; latitude >= coarseLats[coarseLats.length - 1]; latitude -= fineStep) {
+    fineLats.push(latitude)
+  }
+
+  const coarseNx = coarseLons.length
+  const coarseNy = coarseLats.length
+  const dx = coarseLons.length > 1 ? coarseLons[1] - coarseLons[0] : 10
+  const dy = coarseLats.length > 1 ? coarseLats[0] - coarseLats[1] : 10
+  const readCoarse = (array, latIndex, lonIndex) => array[latIndex * coarseNx + lonIndex] ?? 0
+  const sampleBilinear = (array, latitude, longitude) => {
+    const lonPosition = (longitude - coarseLons[0]) / dx
+    const latPosition = (coarseLats[0] - latitude) / dy
+    const lonIndex = Math.max(0, Math.min(coarseNx - 2, Math.floor(lonPosition)))
+    const latIndex = Math.max(0, Math.min(coarseNy - 2, Math.floor(latPosition)))
+    const lonMix = Math.max(0, Math.min(1, lonPosition - lonIndex))
+    const latMix = Math.max(0, Math.min(1, latPosition - latIndex))
+
+    const topLeft = readCoarse(array, latIndex, lonIndex)
+    const topRight = readCoarse(array, latIndex, lonIndex + 1)
+    const bottomLeft = readCoarse(array, latIndex + 1, lonIndex)
+    const bottomRight = readCoarse(array, latIndex + 1, lonIndex + 1)
+
+    if ([topLeft, topRight, bottomLeft, bottomRight].every((value) => Math.abs(value) < 0.001)) {
+      return 0
+    }
+
+    const top = topLeft * (1 - lonMix) + topRight * lonMix
+    const bottom = bottomLeft * (1 - lonMix) + bottomRight * lonMix
+    return top * (1 - latMix) + bottom * latMix
+  }
+
+  const uData = []
+  const vData = []
+  for (const latitude of fineLats) {
+    for (const longitude of fineLons) {
+      uData.push(Number(sampleBilinear(coarseU, latitude, longitude).toFixed(3)))
+      vData.push(Number(sampleBilinear(coarseV, latitude, longitude).toFixed(3)))
     }
   }
 
@@ -518,14 +597,14 @@ const buildMapField = async (generatedAt) => {
         header: {
           parameterCategory: 2,
           parameterNumber: 2,
-          nx,
-          ny,
-          lo1: uniqueLons[0],
-          la1: uniqueLats[0],
-          lo2: uniqueLons[uniqueLons.length - 1],
-          la2: uniqueLats[uniqueLats.length - 1],
-          dx: uniqueLons.length > 1 ? uniqueLons[1] - uniqueLons[0] : 10,
-          dy: uniqueLats.length > 1 ? Math.abs(uniqueLats[0] - uniqueLats[1]) : 10,
+          nx: fineLons.length,
+          ny: fineLats.length,
+          lo1: fineLons[0],
+          la1: fineLats[0],
+          lo2: fineLons[fineLons.length - 1],
+          la2: fineLats[fineLats.length - 1],
+          dx: fineStep,
+          dy: fineStep,
           refTime: generatedAt,
         },
         data: uData,
@@ -534,14 +613,14 @@ const buildMapField = async (generatedAt) => {
         header: {
           parameterCategory: 2,
           parameterNumber: 3,
-          nx,
-          ny,
-          lo1: uniqueLons[0],
-          la1: uniqueLats[0],
-          lo2: uniqueLons[uniqueLons.length - 1],
-          la2: uniqueLats[uniqueLats.length - 1],
-          dx: uniqueLons.length > 1 ? uniqueLons[1] - uniqueLons[0] : 10,
-          dy: uniqueLats.length > 1 ? Math.abs(uniqueLats[0] - uniqueLats[1]) : 10,
+          nx: fineLons.length,
+          ny: fineLats.length,
+          lo1: fineLons[0],
+          la1: fineLats[0],
+          lo2: fineLons[fineLons.length - 1],
+          la2: fineLats[fineLats.length - 1],
+          dx: fineStep,
+          dy: fineStep,
           refTime: generatedAt,
         },
         data: vData,
@@ -553,13 +632,7 @@ const buildMapField = async (generatedAt) => {
 const main = async () => {
   const spots = JSON.parse(await readFile(spotsPath, 'utf8'))
   const generatedAt = new Date().toISOString()
-  const spotForecasts = []
-
-  for (const spot of spots) {
-    const forecast = await buildSpotForecast(spot, generatedAt)
-    spotForecasts.push(forecast)
-  }
-
+  const spotForecasts = await buildSpotForecasts(spots, generatedAt)
   const mapField = await buildMapField(generatedAt)
 
   const payload = {

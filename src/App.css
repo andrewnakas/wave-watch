@@ -98,6 +98,11 @@ button {
   color: #f3fbff;
 }
 
+.inline-button {
+  display: inline-flex;
+  margin-top: 16px;
+}
+
 .app-main {
   display: grid;
   gap: 20px;
@@ -137,6 +142,12 @@ button {
   gap: 12px;
 }
 
+.spot-list {
+  max-height: 980px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .spot-card {
   width: 100%;
   text-align: left;
@@ -156,6 +167,12 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.spot-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .spot-card p,
@@ -188,6 +205,17 @@ button {
 .favorite-button.active {
   background: rgba(255, 216, 94, 0.14);
   border-color: rgba(255, 216, 94, 0.3);
+}
+
+.mini-pill {
+  border: 1px solid rgba(116, 214, 255, 0.24);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9be6ff;
+  background: rgba(44, 167, 216, 0.12);
 }
 
 .hero-column {
@@ -377,6 +405,34 @@ button {
 
 .legend-dot.fair {
   background: #f2a65a;
+}
+
+.legend-camera {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: rgba(44, 167, 216, 0.14);
+}
+
+.webcam-pin {
+  background: transparent;
+  border: 0;
+}
+
+.webcam-pin span {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(10, 24, 44, 0.92);
+  border: 1px solid rgba(116, 214, 255, 0.45);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  font-size: 12px;
 }
 
 .empty-state {
