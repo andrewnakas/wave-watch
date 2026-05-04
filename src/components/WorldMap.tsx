@@ -3,17 +3,18 @@ import L from 'leaflet'
 import { feature } from 'topojson-client'
 import landTopology from 'world-atlas/land-110m.json'
 import 'leaflet/dist/leaflet.css'
-import type { ForecastCollection, ForecastPayload, MapFieldPoint, VelocityRecord } from '../types'
+import type { MapDataset, MapFieldPoint, Spot, SpotSummary, VelocityRecord } from '../types'
 
 type Props = {
-  collection: ForecastCollection
+  collection: MapDataset
+  spotCatalog: Spot[]
+  summaryById: Map<string, SpotSummary>
   selectedSpotId: string
   onSelectSpot: (spotId: string) => void
   onVisibleSpotIdsChange?: (spotIds: string[]) => void
 }
 
 type LeafletVelocityLayer = L.Layer & {
-  setData?: (data: unknown) => void
   _map?: L.Map
   _container?: HTMLElement
 }
@@ -32,52 +33,36 @@ const webcamIcon = L.divIcon({
 
 const clampVelocityData = (records: VelocityRecord[]) => {
   if (records.length < 2) return records
-
   const [uRecord, vRecord] = records
-  const maxReasonableSpeed = 8
-  const maxHardSpeed = 14
   const nextU = [...uRecord.data]
   const nextV = [...vRecord.data]
-
   for (let index = 0; index < nextU.length; index += 1) {
     const u = nextU[index] ?? 0
     const v = nextV[index] ?? 0
     const magnitude = Math.sqrt(u * u + v * v)
-
-    if (magnitude > maxHardSpeed) {
+    if (magnitude > 14) {
       nextU[index] = 0
       nextV[index] = 0
-      continue
-    }
-
-    if (magnitude > maxReasonableSpeed) {
-      const scale = maxReasonableSpeed / magnitude
+    } else if (magnitude > 8) {
+      const scale = 8 / magnitude
       nextU[index] = Number((u * scale).toFixed(3))
       nextV[index] = Number((v * scale).toFixed(3))
     }
   }
-
-  return [
-    { ...uRecord, data: nextU },
-    { ...vRecord, data: nextV },
-  ]
+  return [{ ...uRecord, data: nextU }, { ...vRecord, data: nextV }]
 }
 
 const cleanupVelocityLayer = (map: L.Map | null, layer: LeafletVelocityLayer | null) => {
   if (!map || !layer) return
   try {
     map.removeLayer(layer)
-  } catch {
-    // ignore third-party cleanup errors
-  }
-  if (layer._container) {
-    layer._container.remove()
-  }
+  } catch {}
+  if (layer._container) layer._container.remove()
 }
 
-const distanceSquared = (forecast: ForecastPayload, latitude: number, longitude: number) => {
-  const latDelta = forecast.spot.latitude - latitude
-  const lonDelta = forecast.spot.longitude - longitude
+const distanceSquared = (spot: Spot, latitude: number, longitude: number) => {
+  const latDelta = spot.latitude - latitude
+  const lonDelta = spot.longitude - longitude
   return latDelta * latDelta + lonDelta * lonDelta
 }
 
@@ -89,6 +74,8 @@ const pointDistanceSquared = (point: MapFieldPoint, latitude: number, longitude:
 
 export function WorldMap({
   collection,
+  spotCatalog,
+  summaryById,
   selectedSpotId,
   onSelectSpot,
   onVisibleSpotIdsChange,
@@ -103,18 +90,13 @@ export function WorldMap({
   const interactionTimerRef = useRef<number | null>(null)
   const [velocityReady, setVelocityReady] = useState(false)
 
-  const webcamCount = useMemo(
-    () => collection.spots.filter((spot) => Boolean(spot.spot.webcamUrl)).length,
-    [collection.spots],
-  )
+  const webcamCount = useMemo(() => spotCatalog.filter((spot) => Boolean(spot.webcamUrl)).length, [spotCatalog])
 
   const nearestFieldPoint = useCallback(
     (latitude: number, longitude: number) => {
       if (!collection.mapField.points.length) return null
       return collection.mapField.points.reduce((best, point) =>
-        pointDistanceSquared(point, latitude, longitude) < pointDistanceSquared(best, latitude, longitude)
-          ? point
-          : best,
+        pointDistanceSquared(point, latitude, longitude) < pointDistanceSquared(best, latitude, longitude) ? point : best,
       )
     },
     [collection.mapField.points],
@@ -123,34 +105,25 @@ export function WorldMap({
   const visibleSpotUpdater = useCallback(() => {
     const map = mapRef.current
     if (!map || !onVisibleSpotIdsChange) return
-
     const bounds = map.getBounds()
     const center = map.getCenter()
-    const visibleIds = collection.spots
-      .filter((forecast) => bounds.pad(0.12).contains([forecast.spot.latitude, forecast.spot.longitude]))
+    const visibleIds = spotCatalog
+      .filter((spot) => bounds.pad(0.12).contains([spot.latitude, spot.longitude]))
       .sort((a, b) => distanceSquared(a, center.lat, center.lng) - distanceSquared(b, center.lat, center.lng))
-      .map((forecast) => forecast.spot.id)
-
+      .map((spot) => spot.id)
     onVisibleSpotIdsChange(visibleIds)
-  }, [collection.spots, onVisibleSpotIdsChange])
+  }, [onVisibleSpotIdsChange, spotCatalog])
 
   useEffect(() => {
     let active = true
-
     const initVelocity = async () => {
       ;(globalThis as { L?: typeof L }).L = L
       try {
         await import('leaflet-velocity')
-      } catch {
-        // ignore; readiness check below will stay false
-      }
-      if (active) {
-        setVelocityReady(Boolean((L as LeafletWithVelocity).velocityLayer))
-      }
+      } catch {}
+      if (active) setVelocityReady(Boolean((L as LeafletWithVelocity).velocityLayer))
     }
-
     void initVelocity()
-
     return () => {
       active = false
     }
@@ -158,7 +131,6 @@ export function WorldMap({
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return
-
     const map = L.map(mapElementRef.current, {
       worldCopyJump: true,
       zoomControl: true,
@@ -210,7 +182,6 @@ export function WorldMap({
   const mountVelocityLayer = useCallback(() => {
     const map = mapRef.current
     if (!map || !velocityReady || !velocityLeaflet.velocityLayer) return
-
     cleanupVelocityLayer(map, velocityLayerRef.current)
     velocityLayerRef.current = null
 
@@ -239,17 +210,6 @@ export function WorldMap({
       minZoom: 0,
       maxZoom: 12,
       particleReduction: 1,
-      dynamicOpacity: true,
-      velocityOpacity: (velocity: number, u?: number, v?: number) => {
-        const magnitude =
-          u !== undefined && v !== undefined
-            ? Math.sqrt(u * u + v * v)
-            : velocity
-
-        if (magnitude > 10) return 0
-        const normalized = Math.min(magnitude / 6, 1)
-        return Math.max(0.4, normalized * 0.95)
-      },
     })
 
     velocityLayer.addTo(map)
@@ -258,28 +218,20 @@ export function WorldMap({
 
   useEffect(() => {
     velocityDataRef.current = clampVelocityData(collection.mapField.velocityData)
-    if (!velocityReady) return
-    mountVelocityLayer()
+    if (velocityReady) mountVelocityLayer()
   }, [collection.mapField.velocityData, mountVelocityLayer, velocityReady])
 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !velocityReady) return
-
     const refreshAfterInteraction = () => {
       visibleSpotUpdater()
-      if (interactionTimerRef.current !== null) {
-        window.clearTimeout(interactionTimerRef.current)
-      }
-      interactionTimerRef.current = window.setTimeout(() => {
-        mountVelocityLayer()
-      }, 100)
+      if (interactionTimerRef.current !== null) window.clearTimeout(interactionTimerRef.current)
+      interactionTimerRef.current = window.setTimeout(() => mountVelocityLayer(), 100)
     }
-
     const showPointData = (event: L.LeafletMouseEvent) => {
       const nearestPoint = nearestFieldPoint(event.latlng.lat, event.latlng.lng)
       if (!nearestPoint) return
-
       L.popup({ maxWidth: 260 })
         .setLatLng(event.latlng)
         .setContent(
@@ -287,11 +239,9 @@ export function WorldMap({
         )
         .openOn(map)
     }
-
     map.on('zoomend', refreshAfterInteraction)
     map.on('moveend', refreshAfterInteraction)
     map.on('click', showPointData)
-
     return () => {
       map.off('zoomend', refreshAfterInteraction)
       map.off('moveend', refreshAfterInteraction)
@@ -311,49 +261,47 @@ export function WorldMap({
     layer.clearLayers()
     webcamLayer.clearLayers()
 
-    collection.spots.forEach((forecast) => {
-      const isSelected = forecast.spot.id === selectedSpotId
-      const marker = L.circleMarker([forecast.spot.latitude, forecast.spot.longitude], {
+    spotCatalog.forEach((spot) => {
+      const summary = summaryById.get(spot.id)
+      const isSelected = spot.id === selectedSpotId
+      const marker = L.circleMarker([spot.latitude, spot.longitude], {
         pane: 'spotsPane',
-        radius: isSelected ? 7 : 4,
+        radius: isSelected ? 7 : summary ? 3.4 : 2.5,
         weight: isSelected ? 2 : 1,
-        color: isSelected ? '#f8fbff' : '#76d6ff',
-        fillColor:
-          forecast.current.score >= 65
+        color: isSelected ? '#f8fbff' : summary ? '#76d6ff' : 'rgba(160, 188, 214, 0.72)',
+        fillColor: summary
+          ? summary.current.score >= 65
             ? '#00e0a4'
-            : forecast.current.score >= 45
+            : summary.current.score >= 45
               ? '#76d6ff'
-              : '#f2a65a',
-        fillOpacity: 0.92,
+              : '#f2a65a'
+          : '#6d7f93',
+        fillOpacity: summary ? 0.9 : 0.45,
       })
-      const webcamLine = forecast.spot.webcamUrl
-        ? `<br/><a href="${forecast.spot.webcamUrl}" target="_blank" rel="noreferrer">Open public webcam</a>`
-        : ''
-      marker.bindPopup(
-        `<strong>${forecast.spot.name}</strong><br/>${forecast.spot.region}, ${forecast.spot.country}<br/>Score ${forecast.current.score} · ${forecast.current.waveHeight.toFixed(1)}m @ ${forecast.current.wavePeriod.toFixed(1)}s${webcamLine}`,
-      )
-      marker.on('click', () => onSelectSpot(forecast.spot.id))
+      const webcamLine = spot.webcamUrl ? `<br/><a href="${spot.webcamUrl}" target="_blank" rel="noreferrer">Open public webcam</a>` : ''
+      const popup = summary
+        ? `<strong>${spot.name}</strong><br/>${spot.region}, ${spot.country}<br/>Score ${summary.current.score} · ${summary.current.waveHeight.toFixed(1)}m @ ${summary.current.wavePeriod.toFixed(1)}s<br/>Tide ${summary.current.seaLevelHeight?.toFixed(2) ?? '--'}m ${summary.current.tideTrend}${webcamLine}`
+        : `<strong>${spot.name}</strong><br/>${spot.region}, ${spot.country}<br/>Click for live detail${webcamLine}`
+      marker.bindPopup(popup)
+      marker.on('click', () => onSelectSpot(spot.id))
       marker.addTo(layer)
 
-      if (forecast.spot.webcamUrl) {
-        const webcamMarker = L.marker([forecast.spot.latitude, forecast.spot.longitude], {
+      if (spot.webcamUrl) {
+        const webcamMarker = L.marker([spot.latitude, spot.longitude], {
           pane: 'webcamPane',
           icon: webcamIcon,
-          title: `${forecast.spot.name} webcam`,
+          title: `${spot.name} webcam`,
         })
-        webcamMarker.bindPopup(
-          `<strong>${forecast.spot.name} webcam</strong><br/><a href="${forecast.spot.webcamUrl}" target="_blank" rel="noreferrer">Open public webcam</a>`,
-        )
-        webcamMarker.on('click', () => onSelectSpot(forecast.spot.id))
+        webcamMarker.bindPopup(`<strong>${spot.name} webcam</strong><br/><a href="${spot.webcamUrl}" target="_blank" rel="noreferrer">Open public webcam</a>`)
+        webcamMarker.on('click', () => onSelectSpot(spot.id))
         webcamMarker.addTo(webcamLayer)
       }
     })
 
     visibleSpotUpdater()
-  }, [collection.spots, onSelectSpot, selectedSpotId, visibleSpotUpdater])
+  }, [onSelectSpot, selectedSpotId, spotCatalog, summaryById, visibleSpotUpdater])
 
-  const totalSpots = collection.spots.length
-  const best = [...collection.spots].sort((a, b) => b.current.score - a.current.score)[0]
+  const best = [...summaryById.values()].sort((a, b) => b.current.score - a.current.score)[0]
 
   return (
     <section className="panel world-panel">
@@ -363,14 +311,14 @@ export function WorldMap({
           <h2>Wave flow particles</h2>
         </div>
         <span className="muted-text">
-          {totalSpots} spots · {webcamCount} webcam pins
+          {spotCatalog.length.toLocaleString()} spots · {webcamCount} webcam pins
           {!velocityReady ? ' · loading velocity' : ''}
         </span>
       </div>
 
       <div className="world-panel-meta">
-        <span>Pan the map to discover spots in-view. Webcam spots get 📷 markers.</span>
-        <span>Best now: {best.spot.name} ({best.current.score})</span>
+        <span>Pan the map to browse all 9,000 spots. Global waves are always on; clicking a spot loads deeper live detail.</span>
+        <span>Best now: {best ? `${best.spot.name} (${best.current.score})` : 'loading'}</span>
       </div>
 
       <div className="world-map-wrap">

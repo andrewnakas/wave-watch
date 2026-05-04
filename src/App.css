@@ -110,8 +110,12 @@ button {
 
 .layout-grid {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr) 300px;
   gap: 20px;
+}
+
+.map-first-grid {
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.78fr) minmax(280px, 0.72fr);
+  align-items: start;
 }
 
 .panel {
@@ -146,6 +150,33 @@ button {
   max-height: 980px;
   overflow: auto;
   padding-right: 4px;
+}
+
+.spot-search {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.spot-search span {
+  color: #8dcdf2;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.spot-search input {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid rgba(150, 197, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f3fbff;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.spot-search input::placeholder {
+  color: #8ba2b9;
 }
 
 .spot-card {
@@ -256,7 +287,7 @@ button {
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 14px;
   margin-top: 24px;
 }
@@ -370,7 +401,8 @@ button {
 
 .world-map-wrap {
   position: relative;
-  height: 420px;
+  height: min(72vh, 760px);
+  min-height: 520px;
   border-radius: 24px;
   overflow: hidden;
   background: rgba(7, 20, 33, 0.9);
@@ -443,8 +475,8 @@ button {
 }
 
 @media (max-width: 1200px) {
-  .layout-grid {
-    grid-template-columns: 280px minmax(0, 1fr);
+  .map-first-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
   }
 
   .insight-panel {
@@ -469,12 +501,13 @@ button {
     flex-direction: column;
   }
 
-  .layout-grid {
+  .map-first-grid {
     grid-template-columns: 1fr;
   }
 
   .world-map-wrap {
-    height: 340px;
+    height: 58vh;
+    min-height: 340px;
   }
 
   .stat-grid,

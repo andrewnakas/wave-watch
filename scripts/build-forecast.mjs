@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -6,7 +7,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(__dirname, '..')
 const spotsPath = path.join(root, 'src', 'data', 'spots.json')
 const outputDir = path.join(root, 'public', 'data')
-const outputPath = path.join(outputDir, 'forecast-data.json')
+const mapOutputPath = path.join(outputDir, 'map-data.json')
+const cacheDir = path.join(root, '.cache', 'forecast-fetches')
+const cacheTtlMs = 12 * 60 * 60 * 1000
+const summaryBatchSize = Number(process.env.SPOT_BATCH_SIZE || 50)
+const summaryForecastDays = Number(process.env.SPOT_FORECAST_DAYS || 2)
+const requestTimeoutMs = Number(process.env.REQUEST_TIMEOUT_MS || 45000)
+const maxSpots = Number(process.env.MAX_SPOTS || 0)
 
 const marineBase = 'https://marine-api.open-meteo.com/v1/marine'
 const weatherBase = 'https://api.open-meteo.com/v1/forecast'
@@ -33,6 +40,8 @@ const dayLabel = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: 'numeric',
 })
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const circularDistance = (a, b) => {
   const delta = Math.abs(a - b) % 360
@@ -70,6 +79,45 @@ const stdev = (values) => {
   return Math.sqrt(variance)
 }
 
+const classifyTideTrend = (current, next) => {
+  if (safeNumber(current) === null || safeNumber(next) === null) return 'slack'
+  const delta = next - current
+  if (Math.abs(delta) < 0.02) return 'slack'
+  return delta > 0 ? 'rising' : 'falling'
+}
+
+const indexByTime = (times) =>
+  new Map((Array.isArray(times) ? times : []).map((time, index) => [time, index]))
+
+const summarizeTide = (hourly) => {
+  const extremes = []
+  for (let index = 1; index < hourly.length - 1; index += 1) {
+    const previous = hourly[index - 1]?.seaLevelHeight
+    const current = hourly[index]?.seaLevelHeight
+    const next = hourly[index + 1]?.seaLevelHeight
+    if (
+      safeNumber(previous) === null ||
+      safeNumber(current) === null ||
+      safeNumber(next) === null
+    ) {
+      continue
+    }
+    if (current >= previous && current > next) {
+      extremes.push({ time: hourly[index].time, type: 'high', seaLevelHeight: Number(current.toFixed(2)) })
+    } else if (current <= previous && current < next) {
+      extremes.push({ time: hourly[index].time, type: 'low', seaLevelHeight: Number(current.toFixed(2)) })
+    }
+  }
+
+  return {
+    currentSeaLevelHeight: hourly[0]?.seaLevelHeight ?? null,
+    currentTrend: hourly[0]?.tideTrend ?? 'slack',
+    nextHigh: extremes.find((entry) => entry.type === 'high') ?? null,
+    nextLow: extremes.find((entry) => entry.type === 'low') ?? null,
+    upcoming: extremes.slice(0, 8),
+  }
+}
+
 const windAlignment = (windDirection, offshoreDirections) => {
   const bestDistance = Math.min(
     ...offshoreDirections.map((dir) => circularDistance(dir, windDirection)),
@@ -102,11 +150,19 @@ const summarizeDaily = (hourly) => {
 
   return Array.from(buckets.entries()).map(([date, points]) => {
     const best = [...points].sort((a, b) => b.score - a.score)[0]
+    const tideHeights = points
+      .map((point) => point.seaLevelHeight)
+      .filter((value) => safeNumber(value) !== null)
     return {
       date,
       label: dayLabel.format(new Date(date)),
       maxWaveHeight: Math.max(...points.map((point) => point.waveHeight)),
       minWaveHeight: Math.min(...points.map((point) => point.waveHeight)),
+      maxSeaLevelHeight: tideHeights.length ? Math.max(...tideHeights) : null,
+      minSeaLevelHeight: tideHeights.length ? Math.min(...tideHeights) : null,
+      tideRange: tideHeights.length
+        ? Number((Math.max(...tideHeights) - Math.min(...tideHeights)).toFixed(2))
+        : null,
       avgWavePeriod:
         points.reduce((sum, point) => sum + point.wavePeriod, 0) / points.length,
       avgWindSpeed:
@@ -122,9 +178,13 @@ const summarizeDaily = (hourly) => {
 const fetchJsonWithRetry = async (url, retries = 5) => {
   let lastError = null
   for (let attempt = 1; attempt <= retries; attempt += 1) {
+    let timeout = null
     try {
+      const controller = new AbortController()
+      timeout = setTimeout(() => controller.abort(), requestTimeoutMs)
       const response = await fetch(url, {
         headers: { 'user-agent': 'wave-watch-build/1.0' },
+        signal: controller.signal,
       })
       if (!response.ok) {
         const retryAfterHeader = response.headers.get('retry-after')
@@ -133,23 +193,58 @@ const fetchJsonWithRetry = async (url, retries = 5) => {
         error.retryAfterMs = Number.isFinite(retryAfterSeconds)
           ? retryAfterSeconds * 1000
           : response.status === 429
-            ? 4000 * attempt
+            ? Math.min(8000 * attempt, 45000)
             : null
         throw error
       }
       return await response.json()
     } catch (error) {
       lastError = error
+      if (error?.name === 'AbortError') {
+        lastError = new Error(`Request timeout for ${url}`)
+      }
       if (attempt < retries) {
         const retryAfterMs =
           typeof error?.retryAfterMs === 'number' && Number.isFinite(error.retryAfterMs)
             ? error.retryAfterMs
             : 1000 * attempt
-        await new Promise((resolve) => setTimeout(resolve, retryAfterMs))
+        await delay(retryAfterMs)
       }
+    } finally {
+      if (timeout) clearTimeout(timeout)
     }
   }
   throw lastError
+}
+
+const cachePathForUrl = (url) =>
+  path.join(cacheDir, `${createHash('sha1').update(String(url)).digest('hex')}.json`)
+
+const fetchJsonCached = async (url, { forceRefresh = false } = {}) => {
+  const cachePath = cachePathForUrl(url)
+
+  if (!forceRefresh) {
+    try {
+      const raw = JSON.parse(await readFile(cachePath, 'utf8'))
+      if (
+        raw?.fetchedAt &&
+        Date.now() - new Date(raw.fetchedAt).getTime() < cacheTtlMs &&
+        raw?.payload !== undefined
+      ) {
+        return raw.payload
+      }
+    } catch {
+      // Cache miss/stale/corrupt: refetch.
+    }
+  }
+
+  const payload = await fetchJsonWithRetry(url)
+  await mkdir(cacheDir, { recursive: true })
+  await writeFile(
+    cachePath,
+    `${JSON.stringify({ fetchedAt: new Date().toISOString(), url: String(url), payload })}\n`,
+  )
+  return payload
 }
 
 const parseValue = (token) => {
@@ -213,8 +308,8 @@ const fetchBuoyObservation = async (spot) => {
   }
 }
 
-const blendWaveAndWeather = ({ marine, weather, index }) => {
-  const waveEntries = waveModels.map((model) => ({
+const blendWaveAndWeather = ({ marine, weather, index, weatherIndex = index }) => {
+  let waveEntries = waveModels.map((model) => ({
     ...model,
     waveHeight: safeNumber(marine.hourly[`wave_height_${model.key}`]?.[index]),
     wavePeriod: safeNumber(marine.hourly[`wave_period_${model.key}`]?.[index]),
@@ -224,12 +319,41 @@ const blendWaveAndWeather = ({ marine, weather, index }) => {
     waterTemperature: safeNumber(marine.hourly[`sea_surface_temperature_${model.key}`]?.[index]),
   }))
 
-  const weatherEntries = weatherModels.map((model) => ({
+  if (!waveEntries.some((entry) => entry.waveHeight !== null || entry.wavePeriod !== null)) {
+    waveEntries = [
+      {
+        key: 'default',
+        label: 'Open-Meteo marine guidance',
+        weight: 1,
+        waveHeight: safeNumber(marine.hourly.wave_height?.[index]),
+        wavePeriod: safeNumber(marine.hourly.wave_period?.[index]),
+        waveDirection: safeNumber(marine.hourly.wave_direction?.[index]),
+        swellWaveHeight: safeNumber(marine.hourly.swell_wave_height?.[index]),
+        windWaveHeight: safeNumber(marine.hourly.wind_wave_height?.[index]),
+        waterTemperature: safeNumber(marine.hourly.sea_surface_temperature?.[index]),
+      },
+    ]
+  }
+
+  let weatherEntries = weatherModels.map((model) => ({
     ...model,
-    windSpeed: safeNumber(weather.hourly[`wind_speed_10m_${model.key}`]?.[index]),
-    windDirection: safeNumber(weather.hourly[`wind_direction_10m_${model.key}`]?.[index]),
-    airTemperature: safeNumber(weather.hourly[`temperature_2m_${model.key}`]?.[index]),
+    windSpeed: safeNumber(weather.hourly[`wind_speed_10m_${model.key}`]?.[weatherIndex]),
+    windDirection: safeNumber(weather.hourly[`wind_direction_10m_${model.key}`]?.[weatherIndex]),
+    airTemperature: safeNumber(weather.hourly[`temperature_2m_${model.key}`]?.[weatherIndex]),
   }))
+
+  if (!weatherEntries.some((entry) => entry.windSpeed !== null || entry.airTemperature !== null)) {
+    weatherEntries = [
+      {
+        key: 'default',
+        label: 'Open-Meteo weather guidance',
+        weight: 1,
+        windSpeed: safeNumber(weather.hourly.wind_speed_10m?.[weatherIndex]),
+        windDirection: safeNumber(weather.hourly.wind_direction_10m?.[weatherIndex]),
+        airTemperature: safeNumber(weather.hourly.temperature_2m?.[weatherIndex]),
+      },
+    ]
+  }
 
   const waveHeight = weightedAverage(
     waveEntries.map((entry) => ({ value: entry.waveHeight, weight: entry.weight })),
@@ -274,14 +398,26 @@ const blendWaveAndWeather = ({ marine, weather, index }) => {
   }
 }
 
-const buildSpotForecastFromResponses = ({ spot, marine, weather, buoy, generatedAt }) => {
-  const times = marine?.hourly?.time
-  if (!Array.isArray(times) || !times.length) {
+const buildSpotForecastFromResponses = ({ spot, marine, weather, tide, buoy, generatedAt }) => {
+  const marineTimes = marine?.hourly?.time
+  const weatherTimes = weather?.hourly?.time
+  const tideTimes = tide?.hourly?.time ?? []
+  if (!Array.isArray(marineTimes) || !marineTimes.length || !Array.isArray(weatherTimes) || !weatherTimes.length) {
     throw new Error(`No marine forecast returned for ${spot.name}`)
+  }
+  const tideSeaLevels = tide?.hourly?.sea_level_height_msl ?? []
+
+  const weatherIndex = indexByTime(weatherTimes)
+  const tideIndexByTime = indexByTime(tideTimes)
+  const times = marineTimes.filter((time) => weatherIndex.has(time))
+  if (!times.length) {
+    throw new Error(`No overlapping marine/weather forecast times for ${spot.name}`)
   }
 
   const hourly = times.map((time, index) => {
-    const blend = blendWaveAndWeather({ marine, weather, index })
+    const marineIdx = marineTimes.indexOf(time)
+    const weatherIdx = weatherIndex.get(time)
+    const blend = blendWaveAndWeather({ marine, weather, index: marineIdx, weatherIndex: weatherIdx })
     const {
       waveEntries,
       waveHeight,
@@ -310,6 +446,9 @@ const buildSpotForecastFromResponses = ({ spot, marine, weather, buoy, generated
     const periodSpread = stdev(waveEntries.map((entry) => entry.wavePeriod))
     const modelSpread = Number((heightSpread + periodSpread * 0.12).toFixed(2))
     const confidence = Math.round(clamp(100 - heightSpread * 18 - periodSpread * 4, 30, 98))
+    const tideIndex = tideIndexByTime.get(time) ?? -1
+    const seaLevelHeight = safeNumber(tideSeaLevels[tideIndex])
+    const nextSeaLevelHeight = safeNumber(tideSeaLevels[tideIndex + 1])
 
     const point = {
       time,
@@ -320,6 +459,8 @@ const buildSpotForecastFromResponses = ({ spot, marine, weather, buoy, generated
       windDirection: Number(windDirection.toFixed(0)),
       airTemperature: Number(airTemperature.toFixed(1)),
       waterTemperature: Number((waterTemperature ?? airTemperature).toFixed(1)),
+      seaLevelHeight: seaLevelHeight === null ? null : Number(seaLevelHeight.toFixed(2)),
+      tideTrend: classifyTideTrend(seaLevelHeight, nextSeaLevelHeight),
       swellWaveHeight: swellWaveHeight === null ? null : Number(swellWaveHeight.toFixed(2)),
       windWaveHeight: windWaveHeight === null ? null : Number(windWaveHeight.toFixed(2)),
       confidence,
@@ -334,6 +475,7 @@ const buildSpotForecastFromResponses = ({ spot, marine, weather, buoy, generated
 
   const current = hourly[0]
   const nextBestWindow = [...hourly].sort((a, b) => b.score - a.score)[0]
+  const currentBlend = blendWaveAndWeather({ marine, weather, index: 0 })
 
   return {
     spot,
@@ -344,33 +486,47 @@ const buildSpotForecastFromResponses = ({ spot, marine, weather, buoy, generated
     nextBestWindow,
     hourly,
     daily: summarizeDaily(hourly),
+    tide: summarizeTide(hourly),
     buoy,
     modelBlend: {
-      waveModels: waveModels.map((model) => model.label),
-      weatherModels: weatherModels.map((model) => model.label),
+      waveModels: currentBlend.waveEntries.map((model) => model.label),
+      weatherModels: currentBlend.weatherEntries.map((model) => model.label),
       notes: [
-        'Wave fields are blended from ECMWF WAM, NCEP GFS-Wave, and Météo-France wave guidance.',
-        'Surface wind and temperature are blended from ECMWF IFS and NOAA GFS.',
+        'Wave fields use Open-Meteo marine guidance, with per-model blending when model-specific fields are available.',
+        'Surface wind and temperature use Open-Meteo weather guidance, with per-model blending when available.',
+        'Tide proxy uses Open-Meteo sea level height above mean sea level; coastal accuracy is limited.',
         'Confidence falls as model disagreement increases; hourly score favors clean offshore wind plus target swell band.',
       ],
     },
   }
 }
 
-const buildSpotForecasts = async (spots, generatedAt) => {
-  const buoyPromises = new Map(spots.map((spot) => [spot.id, fetchBuoyObservation(spot)]))
-  const forecastPayloads = []
+const summarizeSpotForecast = (forecast) => ({
+  spot: forecast.spot,
+  source: forecast.source,
+  updatedAt: forecast.updatedAt,
+  generatedAt: forecast.generatedAt,
+  current: forecast.current,
+  nextBestWindow: forecast.nextBestWindow,
+  tide: forecast.tide,
+  modelBlend: forecast.modelBlend,
+})
 
-  for (const batch of chunk(spots, 10)) {
+const buildSpotSummaries = async (spots, generatedAt) => {
+  const spotSummaries = []
+  const forceRefresh = process.env.FORCE_REFRESH === '1'
+  const batches = chunk(spots, summaryBatchSize)
+
+  for (const [batchIndex, batch] of batches.entries()) {
+    console.log(`Spot summary batch ${batchIndex + 1}/${batches.length} (${batch.length} spots)`)
     const marineUrl = new URL(marineBase)
     marineUrl.search = new URLSearchParams({
       latitude: batch.map((spot) => String(spot.latitude)).join(','),
       longitude: batch.map((spot) => String(spot.longitude)).join(','),
       hourly:
         'wave_height,wave_period,wave_direction,swell_wave_height,swell_wave_period,wind_wave_height,sea_surface_temperature',
-      forecast_days: '14',
+      forecast_days: String(summaryForecastDays),
       timezone: 'UTC',
-      models: waveModels.map((model) => model.key).join(','),
     }).toString()
 
     const weatherUrl = new URL(weatherBase)
@@ -378,42 +534,54 @@ const buildSpotForecasts = async (spots, generatedAt) => {
       latitude: batch.map((spot) => String(spot.latitude)).join(','),
       longitude: batch.map((spot) => String(spot.longitude)).join(','),
       hourly: 'wind_speed_10m,wind_direction_10m,temperature_2m',
-      forecast_days: '14',
+      forecast_days: String(summaryForecastDays),
       timezone: 'UTC',
-      models: weatherModels.map((model) => model.key).join(','),
     }).toString()
 
-    const [marineResponse, weatherResponse] = await Promise.all([
-      fetchJsonWithRetry(marineUrl),
-      fetchJsonWithRetry(weatherUrl),
-    ])
+    const tideUrl = new URL(marineBase)
+    tideUrl.search = new URLSearchParams({
+      latitude: batch.map((spot) => String(spot.latitude)).join(','),
+      longitude: batch.map((spot) => String(spot.longitude)).join(','),
+      hourly: 'sea_level_height_msl',
+      forecast_days: String(summaryForecastDays),
+      timezone: 'UTC',
+    }).toString()
+
+    const marineResponse = await fetchJsonCached(marineUrl, { forceRefresh })
+    await delay(120)
+    const weatherResponse = await fetchJsonCached(weatherUrl, { forceRefresh })
+    await delay(120)
+    const tideResponse = await fetchJsonCached(tideUrl, { forceRefresh })
 
     const marineList = Array.isArray(marineResponse) ? marineResponse : [marineResponse]
     const weatherList = Array.isArray(weatherResponse) ? weatherResponse : [weatherResponse]
+    const tideList = Array.isArray(tideResponse) ? tideResponse : [tideResponse]
 
     for (const [index, spot] of batch.entries()) {
       const marine = marineList[index]
       const weather = weatherList[index]
-      const buoy = await buoyPromises.get(spot.id)
+      const tide = tideList[index]
       try {
-        forecastPayloads.push(
-          buildSpotForecastFromResponses({
-            spot,
-            marine,
-            weather,
-            buoy,
-            generatedAt,
-          }),
-        )
+        const forecast = buildSpotForecastFromResponses({
+          spot,
+          marine,
+          weather,
+          tide,
+          buoy: null,
+          generatedAt,
+        })
+        spotSummaries.push(summarizeSpotForecast(forecast))
       } catch (error) {
         console.warn(`Skipping ${spot.name}: ${error instanceof Error ? error.message : 'invalid forecast data'}`)
       }
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    await delay(350)
   }
 
-  return forecastPayloads
+  console.log(`Built ${spotSummaries.length} spot summaries from ${spots.length} catalog spots`)
+
+  return spotSummaries
 }
 
 const buildMapFieldPoints = () => {
@@ -438,6 +606,7 @@ const buildMapField = async (generatedAt) => {
   const grid = buildMapFieldPoints()
   const elevationBatches = chunk(grid, 80)
   const oceanGrid = []
+  const forceRefresh = process.env.FORCE_REFRESH === '1'
 
   for (const elevationBatch of elevationBatches) {
     const elevationUrl = new URL('https://api.open-meteo.com/v1/elevation')
@@ -446,7 +615,7 @@ const buildMapField = async (generatedAt) => {
       longitude: elevationBatch.map((point) => point.longitude).join(','),
     }).toString()
 
-    const elevationResponse = await fetchJsonWithRetry(elevationUrl)
+    const elevationResponse = await fetchJsonCached(elevationUrl, { forceRefresh })
     const elevations = Array.isArray(elevationResponse?.elevation)
       ? elevationResponse.elevation
       : []
@@ -462,7 +631,10 @@ const buildMapField = async (generatedAt) => {
   const batches = chunk(oceanGrid, 12)
   const points = []
 
-  for (const batch of batches) {
+  for (const [batchIndex, batch] of batches.entries()) {
+    if (batchIndex % 10 === 0) {
+      console.log(`Map field batch ${batchIndex + 1}/${batches.length}`)
+    }
     const marineUrl = new URL(marineBase)
     marineUrl.search = new URLSearchParams({
       latitude: batch.map((point) => point.latitude).join(','),
@@ -470,7 +642,6 @@ const buildMapField = async (generatedAt) => {
       hourly: 'wave_height,wave_period,wave_direction',
       forecast_days: '1',
       timezone: 'UTC',
-      models: waveModels.map((model) => model.key).join(','),
     }).toString()
 
     const weatherUrl = new URL(weatherBase)
@@ -480,23 +651,41 @@ const buildMapField = async (generatedAt) => {
       hourly: 'wind_speed_10m,wind_direction_10m',
       forecast_days: '1',
       timezone: 'UTC',
-      models: weatherModels.map((model) => model.key).join(','),
     }).toString()
 
-    const [marineBatch, weatherBatch] = await Promise.all([
-      fetchJsonWithRetry(marineUrl),
-      fetchJsonWithRetry(weatherUrl),
-    ])
+    const tideUrl = new URL(marineBase)
+    tideUrl.search = new URLSearchParams({
+      latitude: batch.map((point) => point.latitude).join(','),
+      longitude: batch.map((point) => point.longitude).join(','),
+      hourly: 'sea_level_height_msl',
+      forecast_days: '1',
+      timezone: 'UTC',
+    }).toString()
+
+    const marineBatch = await fetchJsonCached(marineUrl, { forceRefresh })
+    await delay(100)
+    const weatherBatch = await fetchJsonCached(weatherUrl, { forceRefresh })
+    await delay(100)
+    let tideBatch = []
+    try {
+      tideBatch = await fetchJsonCached(tideUrl, { forceRefresh })
+    } catch (error) {
+      console.warn(`Map field tide fetch failed for batch ${batchIndex + 1}/${batches.length}: ${error instanceof Error ? error.message : 'unknown error'}`)
+    }
 
     const marineList = Array.isArray(marineBatch) ? marineBatch : [marineBatch]
     const weatherList = Array.isArray(weatherBatch) ? weatherBatch : [weatherBatch]
+    const tideList = Array.isArray(tideBatch) ? tideBatch : [tideBatch]
 
     marineList.forEach((marine, index) => {
       const pointDef = batch[index]
       if (!pointDef) return
       const weather = weatherList[index]
+      const tide = tideList[index]
       if (!marine?.hourly?.time?.length || !weather?.hourly?.time?.length) return
       const blend = blendWaveAndWeather({ marine, weather, index: 0 })
+      const seaLevelHeight = safeNumber(tide?.hourly?.sea_level_height_msl?.[0])
+      const nextSeaLevelHeight = safeNumber(tide?.hourly?.sea_level_height_msl?.[1])
       if (
         blend.waveHeight === null ||
         blend.wavePeriod === null ||
@@ -514,10 +703,12 @@ const buildMapField = async (generatedAt) => {
         waveDirection: Number(blend.waveDirection.toFixed(0)),
         windSpeed: Number(blend.windSpeed.toFixed(1)),
         windDirection: Number(blend.windDirection.toFixed(0)),
+        seaLevelHeight: seaLevelHeight === null ? null : Number(seaLevelHeight.toFixed(2)),
+        tideTrend: classifyTideTrend(seaLevelHeight, nextSeaLevelHeight),
       })
     })
 
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await delay(150)
   }
 
   points.sort((a, b) => (b.latitude - a.latitude) || (a.longitude - b.longitude))
@@ -630,9 +821,10 @@ const buildMapField = async (generatedAt) => {
 }
 
 const main = async () => {
-  const spots = JSON.parse(await readFile(spotsPath, 'utf8'))
+  const allSpots = JSON.parse(await readFile(spotsPath, 'utf8'))
+  const spots = maxSpots > 0 ? allSpots.slice(0, maxSpots) : allSpots
   const generatedAt = new Date().toISOString()
-  const spotForecasts = await buildSpotForecasts(spots, generatedAt)
+  const spotForecasts = await buildSpotSummaries(spots, generatedAt)
   const mapField = await buildMapField(generatedAt)
 
   const payload = {
@@ -656,8 +848,8 @@ const main = async () => {
   }
 
   await mkdir(outputDir, { recursive: true })
-  await writeFile(outputPath, `${JSON.stringify(payload)}\n`)
-  console.log(`Wrote ${outputPath}`)
+  await writeFile(mapOutputPath, `${JSON.stringify(payload)}\n`)
+  console.log(`Wrote ${mapOutputPath}`)
 }
 
 main().catch((error) => {

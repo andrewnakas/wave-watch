@@ -19,6 +19,24 @@ export type Spot = {
   buoyStationId?: string
   buoyName?: string
   webcamUrl?: string
+  timezone?: string
+  surflineSpotId?: string
+}
+
+export type TideTrend = 'rising' | 'falling' | 'slack'
+
+export type TideExtreme = {
+  time: string
+  type: 'high' | 'low'
+  seaLevelHeight: number
+}
+
+export type TideSummary = {
+  currentSeaLevelHeight: number | null
+  currentTrend: TideTrend
+  nextHigh: TideExtreme | null
+  nextLow: TideExtreme | null
+  upcoming: TideExtreme[]
 }
 
 export type BuoyObservation = {
@@ -54,6 +72,8 @@ export type HourPoint = {
   windDirection: number
   airTemperature: number
   waterTemperature: number
+  seaLevelHeight: number | null
+  tideTrend: TideTrend
   swellWaveHeight?: number | null
   windWaveHeight?: number | null
   score: number
@@ -66,6 +86,9 @@ export type DaySummary = {
   label: string
   maxWaveHeight: number
   minWaveHeight: number
+  maxSeaLevelHeight: number | null
+  minSeaLevelHeight: number | null
+  tideRange: number | null
   avgWavePeriod: number
   avgWindSpeed: number
   bestScore: number
@@ -82,6 +105,7 @@ export type ForecastPayload = {
   nextBestWindow: HourPoint
   hourly: HourPoint[]
   daily: DaySummary[]
+  tide: TideSummary
   buoy?: BuoyObservation | null
   modelBlend: {
     waveModels: string[]
@@ -98,6 +122,8 @@ export type MapFieldPoint = {
   wavePeriod: number
   windSpeed: number
   windDirection: number
+  seaLevelHeight: number | null
+  tideTrend: TideTrend
 }
 
 export type VelocityRecordHeader = {
@@ -119,10 +145,25 @@ export type VelocityRecord = {
   data: number[]
 }
 
-export type ForecastCollection = {
+export type SpotSummary = {
+  spot: Spot
+  source: 'generated'
+  updatedAt: string
+  generatedAt: string
+  current: HourPoint
+  nextBestWindow: HourPoint
+  tide: TideSummary
+  modelBlend: {
+    waveModels: string[]
+    weatherModels: string[]
+    notes: string[]
+  }
+}
+
+export type MapDataset = {
   generatedAt: string
   source: 'generated'
-  spots: ForecastPayload[]
+  spots: SpotSummary[]
   mapField: {
     generatedAt: string
     points: MapFieldPoint[]

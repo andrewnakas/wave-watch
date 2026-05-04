@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "sync-spots": "node scripts/sync-spots.mjs",
     "build:data": "node scripts/build-forecast.mjs",
     "build": "tsc -b && vite build",
     "build:full": "FORCE_REFRESH=1 npm run build:data && npm run build",
