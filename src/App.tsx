@@ -12,21 +12,11 @@ import {
 } from './lib/forecast'
 import type { ForecastPayload, MapDataset, Spot, SpotSummary, TideSummary } from './types'
 
-const FAVORITES_KEY = 'wave-w…ites'
 const allSpots = spotsCatalog as Spot[]
 
-const readFavorites = () => {
-  if (typeof window === 'undefined') return [] as string[]
-  try {
-    const raw = window.localStorage.getItem(FAVORITES_KEY)
-    return raw ? (JSON.parse(raw) as string[]) : []
-  } catch {
-    return []
-  }
-}
-
-const saveFavorites = (favorites: string[]) => {
-  window.localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites))
+type FocusPoint = {
+  latitude: number
+  longitude: number
 }
 
 const emptyTideSummary: TideSummary = {
@@ -37,11 +27,27 @@ const emptyTideSummary: TideSummary = {
   upcoming: [],
 }
 
+const crowdPopularityScore = {
+  High: 92,
+  Medium: 68,
+  Low: 42,
+} as const
+
+const distanceToPoint = (spot: Spot, point: FocusPoint) => {
+  const latDelta = spot.latitude - point.latitude
+  const lonDelta = spot.longitude - point.longitude
+  return Math.sqrt(latDelta * latDelta + lonDelta * lonDelta)
+}
+
+const formatPopularity = (spot: Spot) => `${crowdPopularityScore[spot.crowd]}/100 popularity`
+
+const joinTideTimes = (times: string[]) => (times.length ? times.join(' · ') : '--')
+
 function App() {
   const [selectedSpotId, setSelectedSpotId] = useState('')
   const [visibleSpotIds, setVisibleSpotIds] = useState<string[]>([])
-  const [favorites, setFavorites] = useState<string[]>(() => readFavorites())
   const [spotQuery, setSpotQuery] = useState('')
+  const [focusPoint, setFocusPoint] = useState<FocusPoint | null>(null)
   const [dataset, setDataset] = useState<MapDataset | null>(null)
   const [detailForecast, setDetailForecast] = useState<ForecastPayload | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -55,7 +61,8 @@ function App() {
       .then((payload) => {
         if (!active) return
         setDataset(payload)
-        setSelectedSpotId((current) => current || payload.spots[0]?.spot.id || allSpots[0]?.id || '')
+        const firstId = payload.spots[0]?.spot.id || allSpots[0]?.id || ''
+        setSelectedSpotId((current) => current || firstId)
       })
       .catch((caught) => {
         if (!active) return
@@ -126,7 +133,7 @@ function App() {
         modelBlend: {
           waveModels: ['Global map field estimate'],
           weatherModels: ['Global map field estimate'],
-          notes: ['Approximate current conditions are derived from the nearest global wave-field point until full live detail loads.'],
+          notes: ['Approximate current conditions come from the nearest global wave-field point until live detail loads.'],
         },
       })
     }
@@ -141,14 +148,18 @@ function App() {
 
   const selectedSpot = spotById.get(activeSpotId) ?? null
   const summary = derivedSummaryById.get(activeSpotId) ?? null
+  const effectiveFocusPoint = useMemo(
+    () => focusPoint ?? (selectedSpot ? { latitude: selectedSpot.latitude, longitude: selectedSpot.longitude } : null),
+    [focusPoint, selectedSpot],
+  )
 
   useEffect(() => {
     if (!selectedSpot) {
-      setDetailForecast(null)
       return
     }
 
     let active = true
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDetailLoading(true)
     setDetailForecast(null)
 
@@ -168,47 +179,45 @@ function App() {
     }
   }, [selectedSpot])
 
-  const toggleFavorite = (spotId: string) => {
-    setFavorites((current) => {
-      const next = current.includes(spotId) ? current.filter((id) => id !== spotId) : [...current, spotId]
-      saveFavorites(next)
-      return next
-    })
+  const selectSpot = (spot: Spot) => {
+    setSelectedSpotId(spot.id)
+    setFocusPoint({ latitude: spot.latitude, longitude: spot.longitude })
   }
 
-  const favoriteSpots = useMemo(() => allSpots.filter((spot) => favorites.includes(spot.id)), [favorites])
+  const searchSuggestions = useMemo(() => {
+    const query = spotQuery.trim().toLowerCase()
+    if (!query) return [] as Spot[]
+    return allSpots
+      .filter((spot) => [spot.name, spot.region, spot.country].some((value) => value.toLowerCase().includes(query)))
+      .sort((a, b) => crowdPopularityScore[b.crowd] - crowdPopularityScore[a.crowd] || a.name.localeCompare(b.name))
+      .slice(0, 8)
+  }, [spotQuery])
+
+  const nearbySpots = useMemo(() => {
+    if (!effectiveFocusPoint) return [] as Spot[]
+    return [...allSpots]
+      .sort((a, b) => distanceToPoint(a, effectiveFocusPoint) - distanceToPoint(b, effectiveFocusPoint))
+      .slice(0, 8)
+  }, [effectiveFocusPoint])
 
   const spotList = useMemo(() => {
     const query = spotQuery.trim().toLowerCase()
-    const source = query
-      ? allSpots.filter((spot) =>
-          [spot.name, spot.region, spot.country].some((value) => value.toLowerCase().includes(query)),
-        )
-      : visibleSpotIds.length
-        ? visibleSpotIds.map((id) => spotById.get(id)).filter((spot): spot is Spot => Boolean(spot))
-        : allSpots
+    if (query) {
+      return allSpots
+        .filter((spot) => [spot.name, spot.region, spot.country].some((value) => value.toLowerCase().includes(query)))
+        .slice(0, 24)
+    }
 
-    return [...source]
-      .sort((a, b) => {
-        const aScore = derivedSummaryById.get(a.id)?.current.score ?? -1
-        const bScore = derivedSummaryById.get(b.id)?.current.score ?? -1
-        if (bScore !== aScore) return bScore - aScore
-        return a.name.localeCompare(b.name)
-      })
-      .slice(0, query ? 300 : 220)
-  }, [derivedSummaryById, spotById, spotQuery, visibleSpotIds])
+    if (nearbySpots.length) return nearbySpots
+    if (visibleSpotIds.length) return visibleSpotIds.map((id) => spotById.get(id)).filter((spot): spot is Spot => Boolean(spot)).slice(0, 24)
+    return allSpots.slice(0, 24)
+  }, [nearbySpots, spotById, spotQuery, visibleSpotIds])
 
-  const chartPoints = useMemo(() => {
-    const hours = detailForecast?.hourly.slice(0, 24) ?? []
-    if (!hours.length) return ''
-    return hours
-      .map((point, index) => {
-        const x = (index / Math.max(hours.length - 1, 1)) * 100
-        const y = 100 - Math.min(point.waveHeight / 6, 1) * 100
-        return `${x},${y}`
-      })
-      .join(' ')
-  }, [detailForecast])
+  const currentForecast = detailForecast?.current ?? summary?.current ?? null
+  const nextWindow = detailForecast?.nextBestWindow ?? summary?.nextBestWindow ?? null
+
+  const currentHighTimes = detailForecast?.daily[0]?.tideEvents.filter((event) => event.type === 'high').map((event) => formatHour(event.time)) ?? []
+  const currentLowTimes = detailForecast?.daily[0]?.tideEvents.filter((event) => event.type === 'low').map((event) => formatHour(event.time)) ?? []
 
   const generatedAtText = dataset
     ? new Date(dataset.generatedAt).toLocaleString([], {
@@ -219,306 +228,186 @@ function App() {
       })
     : '--'
 
-  const tideCoverage = Array.from(derivedSummaryById.values()).filter((spot) => spot.current.seaLevelHeight !== null).length
-
   return (
     <div className="app-shell">
-      <header className="topbar">
+      <header className="app-header">
         <div>
           <p className="eyebrow">Wave Watch</p>
-          <h1>Map-first surf discovery with global waves and live spot detail.</h1>
+          <h1>Simple surf check.</h1>
+          <p className="header-copy">Map at the top, pick a spot, then get the waves, tides, wind, and the next few days without digging around.</p>
         </div>
-        <div className="topbar-meta">
-          <span className="status-pill">
-            {allSpots.length.toLocaleString()} spots · {tideCoverage.toLocaleString()} tide snapshots · {generatedAtText}
-          </span>
-          <a className="ghost-button" href={`${import.meta.env.BASE_URL}data/map-data.json`} target="_blank" rel="noreferrer">
-            View raw map data
-          </a>
-        </div>
+        <span className="status-pill">Updated {generatedAtText}</span>
       </header>
 
-      <main className="app-main">
+      <main className="app-stack">
         {dataset ? (
           <WorldMap
             collection={dataset}
             spotCatalog={allSpots}
             summaryById={derivedSummaryById}
             selectedSpotId={activeSpotId}
-            onSelectSpot={setSelectedSpotId}
+            onSelectSpot={(spotId) => {
+              const spot = spotById.get(spotId)
+              setSelectedSpotId(spotId)
+              if (spot) setFocusPoint({ latitude: spot.latitude, longitude: spot.longitude })
+            }}
+            onSelectPoint={(latitude, longitude) => setFocusPoint({ latitude, longitude })}
             onVisibleSpotIdsChange={setVisibleSpotIds}
           />
         ) : null}
 
-        <div className="layout-grid map-first-grid">
-          <section className="hero-column">
-            <section className="panel hero-panel">
-              <div className="hero-copy">
-                <p className="eyebrow">Now watching</p>
-                <div className="hero-title-row">
-                  <div>
-                    <h2>{selectedSpot?.name ?? 'Loading'}</h2>
-                    <p>{selectedSpot ? `${selectedSpot.region}, ${selectedSpot.country}` : 'Waiting on map selection'}</p>
-                  </div>
-                  <div className="score-badge">
-                    <strong>{(detailForecast?.current.score ?? summary?.current.score) ?? '—'}</strong>
-                    <span>{detailForecast || summary ? describeScore(detailForecast?.current.score ?? summary?.current.score ?? 0) : 'Loading'}</span>
-                  </div>
-                </div>
-                <p className="hero-summary">
-                  {selectedSpot
-                    ? `Best tide: ${selectedSpot.tideWindow}. Live tide: ${(detailForecast?.current.seaLevelHeight ?? summary?.current.seaLevelHeight)?.toFixed(2) ?? '--'}m and ${detailForecast?.current.tideTrend ?? summary?.current.tideTrend ?? 'slack'}. Best board: ${selectedSpot.boardHint}. Ideal swell ${selectedSpot.idealSwellMin}–${selectedSpot.idealSwellMax}m @ ${selectedSpot.idealPeriodMin}+s.`
-                    : 'Loading spot details.'}
-                </p>
-                {selectedSpot?.webcamUrl ? (
-                  <a className="ghost-button inline-button" href={selectedSpot.webcamUrl} target="_blank" rel="noreferrer">
-                    Open public webcam
-                  </a>
-                ) : null}
-              </div>
+        <section className="panel selector-panel">
+          <div className="section-heading simple-heading">
+            <div>
+              <p className="eyebrow">Spot selector</p>
+              <h2>Currently selected: {selectedSpot?.name ?? 'Loading spot'}</h2>
+              <p className="muted-text">{selectedSpot ? `${selectedSpot.region}, ${selectedSpot.country}` : 'Pick a spot from the list below.'}</p>
+            </div>
+          </div>
 
-              <div className="stat-grid">
-                <article className="stat-card">
-                  <span>Wave height</span>
-                  <strong>{detailForecast ? `${detailForecast.current.waveHeight.toFixed(1)}m` : summary ? `${summary.current.waveHeight.toFixed(1)}m` : '--'}</strong>
-                  <p>{detailForecast ? 'Live spot forecast loaded.' : 'Approximate current from global wave field.'}</p>
-                </article>
-                <article className="stat-card">
-                  <span>Wave period</span>
-                  <strong>{detailForecast ? `${detailForecast.current.wavePeriod.toFixed(1)}s` : summary ? `${summary.current.wavePeriod.toFixed(1)}s` : '--'}</strong>
-                  <p>{selectedSpot ? `Skill ${selectedSpot.skill} · crowd ${selectedSpot.crowd}` : 'Loading'}</p>
-                </article>
-                <article className="stat-card">
-                  <span>Wind</span>
-                  <strong>
-                    {detailForecast
-                      ? `${detailForecast.current.windSpeed.toFixed(0)} km/h ${formatDirection(detailForecast.current.windDirection)}`
-                      : summary
-                        ? `${summary.current.windSpeed.toFixed(0)} km/h ${formatDirection(summary.current.windDirection)}`
-                        : '--'}
-                  </strong>
-                  <p>{selectedSpot ? `Offshore ${selectedSpot.offshoreDirections.join('° / ')}°` : 'Loading'}</p>
-                </article>
-                <article className="stat-card">
-                  <span>Tide now</span>
-                  <strong>
-                    {(detailForecast?.current.seaLevelHeight ?? summary?.current.seaLevelHeight) !== null && (detailForecast?.current.seaLevelHeight ?? summary?.current.seaLevelHeight) !== undefined
-                      ? `${(detailForecast?.current.seaLevelHeight ?? summary?.current.seaLevelHeight ?? 0).toFixed(2)}m ${detailForecast?.current.tideTrend ?? summary?.current.tideTrend ?? 'slack'}`
-                      : '--'}
-                  </strong>
-                  <p>
-                    {detailForecast?.tide.nextHigh
-                      ? `Next high ${formatHour(detailForecast.tide.nextHigh.time)}`
-                      : detailForecast?.tide.nextLow
-                        ? `Next low ${formatHour(detailForecast.tide.nextLow.time)}`
-                        : detailForecast
-                          ? 'Watching for the next turn'
-                          : 'Detailed tide curve loads on click'}
-                  </p>
-                </article>
-                <article className="stat-card accent-card">
-                  <span>Next best window</span>
-                  <strong>{detailForecast ? formatHour(detailForecast.nextBestWindow.time) : summary ? 'Now' : '--'}</strong>
-                  <p>
-                    {detailForecast
-                      ? `${detailForecast.nextBestWindow.waveHeight.toFixed(1)}m · ${detailForecast.nextBestWindow.wavePeriod.toFixed(1)}s · ${detailForecast.nextBestWindow.confidence}% confidence`
-                      : summary
-                        ? `${summary.current.waveHeight.toFixed(1)}m · ${summary.current.wavePeriod.toFixed(1)}s · map estimate`
-                        : 'Scanning...'}
-                  </p>
-                </article>
-              </div>
-            </section>
+          <label className="spot-search">
+            <span>Search spots</span>
+            <input
+              type="search"
+              value={spotQuery}
+              onChange={(event) => setSpotQuery(event.target.value)}
+              placeholder="Search by spot, region, or country"
+              list="spot-search-suggestions"
+              autoComplete="off"
+            />
+            <datalist id="spot-search-suggestions">
+              {searchSuggestions.map((spot) => (
+                <option key={spot.id} value={spot.name}>{`${spot.region}, ${spot.country}`}</option>
+              ))}
+            </datalist>
+          </label>
 
-            <section className="panel chart-panel">
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">Live spot detail</p>
-                  <h2>24-hour wave pulse</h2>
-                </div>
-                <span className="muted-text">
-                  {detailForecast ? `${detailForecast.current.confidence}% confidence now` : detailLoading ? 'Loading live forecast…' : 'Click a spot for live detail'}
-                </span>
-              </div>
+          <div className="spot-picker-row">
+            {(searchSuggestions.length ? searchSuggestions : spotList).map((spot) => (
+              <button
+                key={spot.id}
+                type="button"
+                className={`spot-pill ${spot.id === activeSpotId ? 'active' : ''}`}
+                onClick={() => selectSpot(spot)}
+              >
+                <strong>{spot.name}</strong>
+                <small>{spot.region}</small>
+              </button>
+            ))}
+          </div>
+        </section>
 
-              {loading ? (
-                <div className="empty-state">Loading map package…</div>
-              ) : error && !dataset ? (
-                <div className="empty-state">{error}</div>
-              ) : detailLoading ? (
-                <div className="empty-state">Loading live tide and forecast for this spot…</div>
-              ) : detailForecast ? (
-                <>
-                  <div className="line-chart-wrap">
-                    <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="line-chart">
-                      <polyline fill="none" stroke="rgba(116, 214, 255, 0.95)" strokeWidth="2" points={chartPoints} />
-                    </svg>
-                  </div>
-                  <div className="hour-row">
-                    {detailForecast.hourly.slice(0, 8).map((point) => (
-                      <article className="hour-card" key={point.time}>
-                        <p>{formatHour(point.time)}</p>
-                        <strong>{point.waveHeight.toFixed(1)}m</strong>
-                        <span>{point.wavePeriod.toFixed(1)}s period</span>
-                        <small>
-                          {point.confidence}% conf · tide {point.seaLevelHeight?.toFixed(2) ?? '--'}m {point.tideTrend}
-                        </small>
-                      </article>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="empty-state">The map is global and instant now. Click any spot to fetch full live tide and forecast detail.</div>
-              )}
-            </section>
+        <section className="panel current-panel">
+          <div className="section-heading simple-heading">
+            <div>
+              <p className="eyebrow">Current conditions</p>
+              <h2>{currentForecast ? describeScore(currentForecast.score) : 'Loading conditions'}</h2>
+            </div>
+            <div className="score-badge">
+              <strong>{currentForecast?.score ?? '—'}</strong>
+              <span>score</span>
+            </div>
+          </div>
 
-            <section className="panel daily-panel">
-              <div className="panel-header">
-                <div>
-                  <p className="eyebrow">8-day live forecast</p>
-                  <h2>Pick your mission</h2>
-                </div>
-              </div>
-              {detailForecast ? (
-                <div className="daily-grid daily-grid-14">
-                  {detailForecast.daily.map((day) => (
-                    <article className="daily-card" key={day.date}>
+          <div className="metrics-grid">
+            <article className="metric-card">
+              <span>Wave</span>
+              <strong>{currentForecast ? `${currentForecast.waveHeight.toFixed(1)}m @ ${currentForecast.wavePeriod.toFixed(1)}s` : '--'}</strong>
+              <p>{currentForecast ? `${formatDirection(currentForecast.waveDirection)} swell` : 'Loading'}</p>
+            </article>
+            <article className="metric-card">
+              <span>Tide</span>
+              <strong>
+                {currentForecast?.seaLevelHeight !== null && currentForecast?.seaLevelHeight !== undefined
+                  ? `${currentForecast.seaLevelHeight.toFixed(2)}m ${currentForecast.tideTrend}`
+                  : '--'}
+              </strong>
+              <p>High {joinTideTimes(currentHighTimes)} · Low {joinTideTimes(currentLowTimes)}</p>
+            </article>
+            <article className="metric-card">
+              <span>Wind</span>
+              <strong>{currentForecast ? `${currentForecast.windSpeed.toFixed(0)} km/h ${formatDirection(currentForecast.windDirection)}` : '--'}</strong>
+              <p>{selectedSpot ? `Best with ${selectedSpot.tideWindow.toLowerCase()}` : 'Loading'}</p>
+            </article>
+            <article className="metric-card">
+              <span>Weather</span>
+              <strong>{currentForecast ? `${currentForecast.airTemperature.toFixed(0)}°C air · ${currentForecast.waterTemperature.toFixed(0)}°C water` : '--'}</strong>
+              <p>{nextWindow ? `Best next window ${formatHour(nextWindow.time)}` : 'Loading next window'}</p>
+            </article>
+          </div>
+        </section>
+
+        <section className="panel future-panel">
+          <div className="section-heading simple-heading">
+            <div>
+              <p className="eyebrow">Forecast</p>
+              <h2>Coming days</h2>
+              <p className="muted-text">Simple daily surf, tide, wind, and weather outlook.</p>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="empty-state">Loading map package…</div>
+          ) : error && !dataset ? (
+            <div className="empty-state">{error}</div>
+          ) : detailLoading ? (
+            <div className="empty-state">Loading spot forecast…</div>
+          ) : detailForecast ? (
+            <div className="forecast-list">
+              {detailForecast.daily.map((day) => {
+                const highTimes = day.tideEvents.filter((event) => event.type === 'high').map((event) => formatHour(event.time))
+                const lowTimes = day.tideEvents.filter((event) => event.type === 'low').map((event) => formatHour(event.time))
+                return (
+                  <article className="forecast-day" key={day.date}>
+                    <div className="forecast-day-head">
                       <div>
                         <p>{day.label}</p>
-                        <strong>{day.maxWaveHeight.toFixed(1)}m</strong>
+                        <strong>{day.maxWaveHeight.toFixed(1)}m max</strong>
                       </div>
-                      <ul>
-                        <li>{day.minWaveHeight.toFixed(1)}–{day.maxWaveHeight.toFixed(1)}m range</li>
-                        <li>{day.avgWavePeriod.toFixed(1)}s avg period</li>
-                        <li>{day.avgWindSpeed.toFixed(0)} km/h wind</li>
-                        <li>{day.tideRange !== null ? `${day.tideRange.toFixed(2)}m tide range` : 'Tide range unavailable'}</li>
-                        <li>Best {day.bestScore} at {day.bestHour}</li>
-                        <li>{day.confidence.toFixed(0)}% confidence</li>
-                      </ul>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">Pick a spot and I’ll fetch live 8-day detail on demand instead of shipping a giant static file for the whole planet.</div>
-              )}
-            </section>
-          </section>
-
-          <aside className="panel sidebar-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Spots</p>
-                <h2>Find them on the map</h2>
-              </div>
-              <span className="muted-text">
-                {allSpots.length.toLocaleString()} catalog · {spotList.length} shown · {favoriteSpots.length} saved
-              </span>
-            </div>
-
-            <label className="spot-search">
-              <span>Search 9,000 spots</span>
-              <input
-                type="search"
-                value={spotQuery}
-                onChange={(event) => setSpotQuery(event.target.value)}
-                placeholder="Search by spot, region, or country"
-              />
-            </label>
-
-            <div className="spot-list">
-              {spotList.map((spot) => {
-                const isFavorite = favorites.includes(spot.id)
-                const isActive = spot.id === activeSpotId
-                const spotSummary = derivedSummaryById.get(spot.id)
-                return (
-                  <article
-                    key={spot.id}
-                    className={`spot-card ${isActive ? 'active' : ''}`}
-                    onClick={() => setSelectedSpotId(spot.id)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setSelectedSpotId(spot.id)
-                      }
-                    }}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div>
-                      <div className="spot-card-title-row">
-                        <h3>{spot.name}</h3>
-                        <div className="spot-card-actions">
-                          {spot.webcamUrl ? <span className="mini-pill">cam</span> : null}
-                          <button
-                            type="button"
-                            className={`favorite-button ${isFavorite ? 'active' : ''}`}
-                            aria-label={isFavorite ? 'Remove favorite' : 'Add favorite'}
-                            onClick={(event) => {
-                              event.stopPropagation()
-                              toggleFavorite(spot.id)
-                            }}
-                          >
-                            ★
-                          </button>
-                        </div>
-                      </div>
-                      <p>
-                        {spot.region}, {spot.country}
-                      </p>
+                      <span className="mini-score">{day.bestScore}</span>
                     </div>
-                    <div className="spot-card-tags">
-                      {spotSummary ? (
-                        <>
-                          <span>score {spotSummary.current.score}</span>
-                          <span>{spotSummary.current.waveHeight.toFixed(1)}m</span>
-                          <span>tide {spotSummary.current.seaLevelHeight?.toFixed(2) ?? '--'}m</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>map only</span>
-                          <span>{spot.skill}</span>
-                          <span>{spot.crowd} crowd</span>
-                        </>
-                      )}
+                    <p className="forecast-copy">{day.outlook}</p>
+                    <div className="forecast-lines">
+                      <span>Surf {day.minWaveHeight.toFixed(1)}–{day.maxWaveHeight.toFixed(1)}m · {day.avgWavePeriod.toFixed(1)}s</span>
+                      <span>Wind {day.avgWindSpeed.toFixed(0)} km/h · Air {day.avgAirTemperature.toFixed(0)}°C</span>
+                      <span>High {joinTideTimes(highTimes)}</span>
+                      <span>Low {joinTideTimes(lowTimes)}</span>
                     </div>
                   </article>
                 )
               })}
             </div>
-          </aside>
+          ) : (
+            <div className="empty-state">Pick a spot to see the daily forecast.</div>
+          )}
+        </section>
 
-          <aside className="panel insight-panel">
-            <div className="panel-header">
-              <div>
-                <p className="eyebrow">Model stack</p>
-                <h2>Forecast notes</h2>
-              </div>
+        <section className="panel extra-panel">
+          <div className="section-heading simple-heading">
+            <div>
+              <p className="eyebrow">Spot notes</p>
+              <h2>Quick read</h2>
             </div>
+          </div>
 
-            <div className="insight-stack">
-              <article className="insight-card emphasis">
-                <span>Wave layer</span>
-                <strong>Global map field</strong>
-                <p>The world map and instant spot summaries come from the global wave field, not a huge per-spot static forecast blob.</p>
-              </article>
-              <article className="insight-card">
-                <span>Detail layer</span>
-                <strong>{detailForecast ? 'Live Open-Meteo spot fetch' : 'On-demand per selected spot'}</strong>
-                <p>That keeps the map fast while still giving you real tide + 8-day detail when you click in.</p>
-              </article>
-              <article className="insight-card">
-                <span>Tide coverage</span>
-                <strong>{tideCoverage.toLocaleString()} spot snapshots</strong>
-                <p>Instant list/map tide values are approximate snapshots; detailed tide turns load with the live spot forecast.</p>
-              </article>
-              <article className="insight-card">
-                <span>Coverage</span>
-                <strong>{allSpots.length.toLocaleString()} spots · {allSpots.filter((spot) => spot.webcamUrl).length} cams</strong>
-                <p>Public webcam coverage is still partial, but every cam-capable spot is marked directly on the map.</p>
-              </article>
-            </div>
-          </aside>
-        </div>
+          <div className="notes-grid">
+            <article className="note-card">
+              <span>Skill</span>
+              <strong>{selectedSpot?.skill ?? '--'}</strong>
+              <p>{selectedSpot ? `${selectedSpot.boardHint} works well here.` : 'Loading spot notes'}</p>
+            </article>
+            <article className="note-card">
+              <span>Popularity</span>
+              <strong>{selectedSpot ? formatPopularity(selectedSpot) : '--'}</strong>
+              <p>{selectedSpot ? `${selectedSpot.crowd} crowd usually.` : 'Loading spot notes'}</p>
+            </article>
+            <article className="note-card">
+              <span>Nearby</span>
+              <strong>{nearbySpots[1]?.name ?? '--'}</strong>
+              <p>{nearbySpots.length > 1 ? 'Easy backup nearby if this one looks off.' : 'Pan the map for nearby options.'}</p>
+            </article>
+          </div>
+        </section>
       </main>
     </div>
   )

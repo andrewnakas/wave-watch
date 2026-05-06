@@ -91,9 +91,12 @@ export type DaySummary = {
   tideRange: number | null
   avgWavePeriod: number
   avgWindSpeed: number
+  avgAirTemperature: number
   bestScore: number
   bestHour: string
   confidence: number
+  tideEvents: TideExtreme[]
+  outlook: string
 }
 
 export type ForecastPayload = {

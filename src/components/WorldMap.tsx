@@ -11,6 +11,7 @@ type Props = {
   summaryById: Map<string, SpotSummary>
   selectedSpotId: string
   onSelectSpot: (spotId: string) => void
+  onSelectPoint?: (latitude: number, longitude: number) => void
   onVisibleSpotIdsChange?: (spotIds: string[]) => void
 }
 
@@ -56,7 +57,9 @@ const cleanupVelocityLayer = (map: L.Map | null, layer: LeafletVelocityLayer | n
   if (!map || !layer) return
   try {
     map.removeLayer(layer)
-  } catch {}
+  } catch {
+    // Ignore double-cleanup errors from Leaflet during remounts.
+  }
   if (layer._container) layer._container.remove()
 }
 
@@ -78,6 +81,7 @@ export function WorldMap({
   summaryById,
   selectedSpotId,
   onSelectSpot,
+  onSelectPoint,
   onVisibleSpotIdsChange,
 }: Props) {
   const mapRef = useRef<L.Map | null>(null)
@@ -120,7 +124,9 @@ export function WorldMap({
       ;(globalThis as { L?: typeof L }).L = L
       try {
         await import('leaflet-velocity')
-      } catch {}
+      } catch {
+        // Keep rendering the map even if the particle plugin fails to load.
+      }
       if (active) setVelocityReady(Boolean((L as LeafletWithVelocity).velocityLayer))
     }
     void initVelocity()
@@ -160,10 +166,10 @@ export function WorldMap({
       pane: 'landMaskPane',
       interactive: false,
       style: {
-        fillColor: '#08111d',
-        fillOpacity: 0.94,
-        color: 'rgba(10, 24, 44, 0.9)',
-        weight: 0.6,
+        fillColor: '#233745',
+        fillOpacity: 0.92,
+        color: 'rgba(118, 214, 255, 0.22)',
+        weight: 0.45,
       },
     }).addTo(map)
 
@@ -231,11 +237,12 @@ export function WorldMap({
     }
     const showPointData = (event: L.LeafletMouseEvent) => {
       const nearestPoint = nearestFieldPoint(event.latlng.lat, event.latlng.lng)
+      onSelectPoint?.(event.latlng.lat, event.latlng.lng)
       if (!nearestPoint) return
       L.popup({ maxWidth: 260 })
         .setLatLng(event.latlng)
         .setContent(
-          `<strong>Wave field</strong><br/>${nearestPoint.latitude.toFixed(2)}, ${nearestPoint.longitude.toFixed(2)}<br/>${nearestPoint.waveHeight.toFixed(1)}m @ ${nearestPoint.wavePeriod.toFixed(1)}s<br/>Wave dir ${nearestPoint.waveDirection.toFixed(0)}° · Wind ${nearestPoint.windSpeed.toFixed(0)} km/h ${nearestPoint.windDirection.toFixed(0)}°`,
+          `<strong>Wave field</strong><br/>${nearestPoint.latitude.toFixed(2)}, ${nearestPoint.longitude.toFixed(2)}<br/>${nearestPoint.waveHeight.toFixed(1)}m @ ${nearestPoint.wavePeriod.toFixed(1)}s<br/>Wave dir ${nearestPoint.waveDirection.toFixed(0)}° · Wind ${nearestPoint.windSpeed.toFixed(0)} km/h ${nearestPoint.windDirection.toFixed(0)}°<br/>Nearby spots now sort by popularity.`,
         )
         .openOn(map)
     }
@@ -251,7 +258,7 @@ export function WorldMap({
         interactionTimerRef.current = null
       }
     }
-  }, [mountVelocityLayer, nearestFieldPoint, velocityReady, visibleSpotUpdater])
+  }, [mountVelocityLayer, nearestFieldPoint, onSelectPoint, velocityReady, visibleSpotUpdater])
 
   useEffect(() => {
     const layer = markersLayerRef.current
@@ -264,26 +271,38 @@ export function WorldMap({
     spotCatalog.forEach((spot) => {
       const summary = summaryById.get(spot.id)
       const isSelected = spot.id === selectedSpotId
-      const marker = L.circleMarker([spot.latitude, spot.longitude], {
-        pane: 'spotsPane',
-        radius: isSelected ? 7 : summary ? 3.4 : 2.5,
-        weight: isSelected ? 2 : 1,
-        color: isSelected ? '#f8fbff' : summary ? '#76d6ff' : 'rgba(160, 188, 214, 0.72)',
-        fillColor: summary
-          ? summary.current.score >= 65
-            ? '#00e0a4'
-            : summary.current.score >= 45
-              ? '#76d6ff'
-              : '#f2a65a'
-          : '#6d7f93',
-        fillOpacity: summary ? 0.9 : 0.45,
-      })
       const webcamLine = spot.webcamUrl ? `<br/><a href="${spot.webcamUrl}" target="_blank" rel="noreferrer">Open public webcam</a>` : ''
       const popup = summary
         ? `<strong>${spot.name}</strong><br/>${spot.region}, ${spot.country}<br/>Score ${summary.current.score} · ${summary.current.waveHeight.toFixed(1)}m @ ${summary.current.wavePeriod.toFixed(1)}s<br/>Tide ${summary.current.seaLevelHeight?.toFixed(2) ?? '--'}m ${summary.current.tideTrend}${webcamLine}`
         : `<strong>${spot.name}</strong><br/>${spot.region}, ${spot.country}<br/>Click for live detail${webcamLine}`
-      marker.bindPopup(popup)
-      marker.on('click', () => onSelectSpot(spot.id))
+      const markerColor = summary
+        ? summary.current.score >= 65
+          ? '#00e0a4'
+          : summary.current.score >= 45
+            ? '#76d6ff'
+            : '#f2a65a'
+        : '#6d7f93'
+
+      const hitArea = L.circleMarker([spot.latitude, spot.longitude], {
+        pane: 'spotsPane',
+        radius: isSelected ? 16 : 13,
+        weight: 0,
+        opacity: 0,
+        fillOpacity: 0,
+      })
+      hitArea.bindPopup(popup)
+      hitArea.on('click', () => onSelectSpot(spot.id))
+      hitArea.addTo(layer)
+
+      const marker = L.circleMarker([spot.latitude, spot.longitude], {
+        pane: 'spotsPane',
+        interactive: false,
+        radius: isSelected ? 8.5 : summary ? 5.6 : 4.4,
+        weight: isSelected ? 2.2 : 1.2,
+        color: isSelected ? '#f8fbff' : summary ? '#76d6ff' : 'rgba(160, 188, 214, 0.72)',
+        fillColor: markerColor,
+        fillOpacity: summary ? 0.95 : 0.55,
+      })
       marker.addTo(layer)
 
       if (spot.webcamUrl) {
@@ -305,19 +324,19 @@ export function WorldMap({
 
   return (
     <section className="panel world-panel">
-      <div className="panel-header">
+      <div className="section-heading">
         <div>
           <p className="eyebrow">World map</p>
           <h2>Wave flow particles</h2>
         </div>
         <span className="muted-text">
           {spotCatalog.length.toLocaleString()} spots · {webcamCount} webcam pins
-          {!velocityReady ? ' · loading velocity' : ''}
+          {!velocityReady ? ' · loading live wave layer' : ''}
         </span>
       </div>
 
       <div className="world-panel-meta">
-        <span>Pan the map to browse all 9,000 spots. Global waves are always on; clicking a spot loads deeper live detail.</span>
+        <span>Click any coastline to center the nearby list around that point, or click a break for full detail.</span>
         <span>Best now: {best ? `${best.spot.name} (${best.current.score})` : 'loading'}</span>
       </div>
 
@@ -326,9 +345,9 @@ export function WorldMap({
       </div>
 
       <div className="world-legend">
-        <span><i className="legend-dot epic" /> 60+ score</span>
-        <span><i className="legend-dot fun" /> 45–59 score</span>
-        <span><i className="legend-dot fair" /> under 45</span>
+        <span><i className="legend-dot epic" /> excellent</span>
+        <span><i className="legend-dot fun" /> decent</span>
+        <span><i className="legend-dot fair" /> poor</span>
         <span><i className="legend-camera" /> webcam</span>
       </div>
     </section>

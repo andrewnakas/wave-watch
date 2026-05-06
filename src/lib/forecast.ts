@@ -1,4 +1,4 @@
-import type { DaySummary, ForecastPayload, HourPoint, MapDataset, Spot, TideSummary } from '../types'
+import type { DaySummary, ForecastPayload, HourPoint, MapDataset, Spot, TideExtreme, TideSummary } from '../types'
 
 const hourLabel = new Intl.DateTimeFormat(undefined, {
   hour: 'numeric',
@@ -13,6 +13,24 @@ const dayLabel = new Intl.DateTimeFormat(undefined, {
 
 const marineBase = 'https://marine-api.open-meteo.com/v1/marine'
 const weatherBase = 'https://api.open-meteo.com/v1/forecast'
+
+type OpenMeteoHourly = {
+  time?: string[]
+  wave_height?: Array<number | null>
+  wave_period?: Array<number | null>
+  wave_direction?: Array<number | null>
+  swell_wave_height?: Array<number | null>
+  wind_wave_height?: Array<number | null>
+  sea_surface_temperature?: Array<number | null>
+  wind_speed_10m?: Array<number | null>
+  wind_direction_10m?: Array<number | null>
+  temperature_2m?: Array<number | null>
+  sea_level_height_msl?: Array<number | null>
+}
+
+type OpenMeteoResponse = {
+  hourly?: OpenMeteoHourly
+}
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 const safeNumber = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : null)
@@ -71,40 +89,19 @@ export const scoreHour = (spot: Spot, point: Pick<HourPoint, 'waveHeight' | 'wav
   return Math.round((heightFit * 0.4 + periodFit * 0.25 + windFit * 0.15 + offshoreFit * 0.2) * 100)
 }
 
-export const summarizeDaily = (hourly: HourPoint[]): DaySummary[] => {
-  const buckets = new Map<string, HourPoint[]>()
-
-  for (const point of hourly) {
-    const date = point.time.slice(0, 10)
-    const bucket = buckets.get(date) ?? []
-    bucket.push(point)
-    buckets.set(date, bucket)
-  }
-
-  return Array.from(buckets.entries()).map(([date, points]) => {
-    const best = [...points].sort((a, b) => b.score - a.score)[0]
-    const tideHeights = points
-      .map((point) => point.seaLevelHeight)
-      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-    return {
-      date,
-      label: dayLabel.format(new Date(date)),
-      maxWaveHeight: Math.max(...points.map((point) => point.waveHeight)),
-      minWaveHeight: Math.min(...points.map((point) => point.waveHeight)),
-      maxSeaLevelHeight: tideHeights.length ? Math.max(...tideHeights) : null,
-      minSeaLevelHeight: tideHeights.length ? Math.min(...tideHeights) : null,
-      tideRange: tideHeights.length ? Math.max(...tideHeights) - Math.min(...tideHeights) : null,
-      avgWavePeriod: points.reduce((sum, point) => sum + point.wavePeriod, 0) / points.length,
-      avgWindSpeed: points.reduce((sum, point) => sum + point.windSpeed, 0) / points.length,
-      bestScore: best.score,
-      bestHour: hourLabel.format(new Date(best.time)),
-      confidence: points.reduce((sum, point) => sum + point.confidence, 0) / points.length,
-    }
-  })
+const buildDailyOutlook = (bestScore: number, avgWindSpeed: number, avgWavePeriod: number, maxWaveHeight: number, avgAirTemperature: number) => {
+  const tempText = `${avgAirTemperature.toFixed(0)}°C air`
+  if (bestScore >= 70) return `Excellent surf with organized ${maxWaveHeight.toFixed(1)}m swell, ${avgWavePeriod.toFixed(1)}s energy, and ${tempText}.`
+  if (bestScore >= 55) return avgWindSpeed <= 14
+    ? `Fun surf with manageable wind and ${tempText}.`
+    : `Decent surf, but wind will matter. Cleaner windows will matter most.`
+  if (bestScore >= 40) return `Rideable but mixed. Expect average surf and ${tempText}.`
+  return `Weak or messy overall. Fine for a look, not a prime strike day.`
 }
 
-const summarizeTide = (hourly: HourPoint[]): TideSummary => {
-  const extremes: TideSummary['upcoming'] = []
+const collectTideExtremes = (hourly: HourPoint[]): TideExtreme[] => {
+  const extremes: TideExtreme[] = []
+
   for (let index = 1; index < hourly.length - 1; index += 1) {
     const previous = hourly[index - 1]?.seaLevelHeight
     const current = hourly[index]?.seaLevelHeight
@@ -119,6 +116,60 @@ const summarizeTide = (hourly: HourPoint[]): TideSummary => {
     }
   }
 
+  return extremes
+}
+
+export const summarizeDaily = (hourly: HourPoint[]): DaySummary[] => {
+  const buckets = new Map<string, HourPoint[]>()
+  const tideExtremesByDate = new Map<string, TideExtreme[]>()
+
+  for (const point of hourly) {
+    const date = point.time.slice(0, 10)
+    const bucket = buckets.get(date) ?? []
+    bucket.push(point)
+    buckets.set(date, bucket)
+  }
+
+  for (const tideEvent of collectTideExtremes(hourly)) {
+    const date = tideEvent.time.slice(0, 10)
+    const bucket = tideExtremesByDate.get(date) ?? []
+    bucket.push(tideEvent)
+    tideExtremesByDate.set(date, bucket)
+  }
+
+  return Array.from(buckets.entries()).map(([date, points]) => {
+    const best = [...points].sort((a, b) => b.score - a.score)[0]
+    const tideHeights = points
+      .map((point) => point.seaLevelHeight)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    const maxWaveHeight = Math.max(...points.map((point) => point.waveHeight))
+    const minWaveHeight = Math.min(...points.map((point) => point.waveHeight))
+    const avgWavePeriod = points.reduce((sum, point) => sum + point.wavePeriod, 0) / points.length
+    const avgWindSpeed = points.reduce((sum, point) => sum + point.windSpeed, 0) / points.length
+    const avgAirTemperature = points.reduce((sum, point) => sum + point.airTemperature, 0) / points.length
+    return {
+      date,
+      label: dayLabel.format(new Date(date)),
+      maxWaveHeight,
+      minWaveHeight,
+      maxSeaLevelHeight: tideHeights.length ? Math.max(...tideHeights) : null,
+      minSeaLevelHeight: tideHeights.length ? Math.min(...tideHeights) : null,
+      tideRange: tideHeights.length ? Math.max(...tideHeights) - Math.min(...tideHeights) : null,
+      avgWavePeriod,
+      avgWindSpeed,
+      bestScore: best.score,
+      bestHour: hourLabel.format(new Date(best.time)),
+      confidence: points.reduce((sum, point) => sum + point.confidence, 0) / points.length,
+      tideEvents: tideExtremesByDate.get(date) ?? [],
+      avgAirTemperature,
+      outlook: buildDailyOutlook(best.score, avgWindSpeed, avgWavePeriod, maxWaveHeight, avgAirTemperature),
+    }
+  })
+}
+
+const summarizeTide = (hourly: HourPoint[]): TideSummary => {
+  const extremes = collectTideExtremes(hourly)
+
   return {
     currentSeaLevelHeight: hourly[0]?.seaLevelHeight ?? null,
     currentTrend: hourly[0]?.tideTrend ?? 'slack',
@@ -128,7 +179,17 @@ const summarizeTide = (hourly: HourPoint[]): TideSummary => {
   }
 }
 
-const blendOpenMeteo = ({ marine, weather, index, weatherIndex = index }: { marine: any; weather: any; index: number; weatherIndex?: number }) => {
+const blendOpenMeteo = ({
+  marine,
+  weather,
+  index,
+  weatherIndex = index,
+}: {
+  marine: OpenMeteoResponse
+  weather: OpenMeteoResponse
+  index: number
+  weatherIndex?: number
+}) => {
   const waveEntries = [
     {
       label: 'Open-Meteo marine guidance',
@@ -167,7 +228,19 @@ const blendOpenMeteo = ({ marine, weather, index, weatherIndex = index }: { mari
   }
 }
 
-const buildForecastFromResponses = ({ spot, marine, weather, tide, generatedAt }: { spot: Spot; marine: any; weather: any; tide: any; generatedAt: string }) => {
+const buildForecastFromResponses = ({
+  spot,
+  marine,
+  weather,
+  tide,
+  generatedAt,
+}: {
+  spot: Spot
+  marine: OpenMeteoResponse
+  weather: OpenMeteoResponse
+  tide: OpenMeteoResponse
+  generatedAt: string
+}) => {
   const marineTimes = marine?.hourly?.time
   const weatherTimes = weather?.hourly?.time
   const tideTimes = tide?.hourly?.time ?? []
