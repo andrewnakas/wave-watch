@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { feature } from 'topojson-client'
-import landTopology from 'world-atlas/land-110m.json'
 import 'leaflet/dist/leaflet.css'
 import type { MapDataset, MapFieldPoint, Spot, SpotSummary, VelocityRecord } from '../types'
 
@@ -88,11 +86,11 @@ export function WorldMap({
   const mapElementRef = useRef<HTMLDivElement | null>(null)
   const markersLayerRef = useRef<L.LayerGroup | null>(null)
   const webcamLayerRef = useRef<L.LayerGroup | null>(null)
-  const landMaskLayerRef = useRef<L.GeoJSON | null>(null)
   const velocityLayerRef = useRef<LeafletVelocityLayer | null>(null)
   const velocityDataRef = useRef<VelocityRecord[]>([])
   const interactionTimerRef = useRef<number | null>(null)
   const [velocityReady, setVelocityReady] = useState(false)
+  const [renderBounds, setRenderBounds] = useState<L.LatLngBounds | null>(null)
 
   const webcamCount = useMemo(() => spotCatalog.filter((spot) => Boolean(spot.webcamUrl)).length, [spotCatalog])
 
@@ -108,8 +106,10 @@ export function WorldMap({
 
   const visibleSpotUpdater = useCallback(() => {
     const map = mapRef.current
-    if (!map || !onVisibleSpotIdsChange) return
+    if (!map) return
     const bounds = map.getBounds()
+    setRenderBounds(bounds.pad(0.2))
+    if (!onVisibleSpotIdsChange) return
     const center = map.getCenter()
     const visibleIds = spotCatalog
       .filter((spot) => bounds.pad(0.12).contains([spot.latitude, spot.longitude]))
@@ -145,8 +145,6 @@ export function WorldMap({
       preferCanvas: true,
     }).setView([18, 0], 2)
 
-    map.createPane('landMaskPane')
-    map.getPane('landMaskPane')!.style.zIndex = '420'
     map.createPane('webcamPane')
     map.getPane('webcamPane')!.style.zIndex = '460'
     map.createPane('spotsPane')
@@ -160,26 +158,12 @@ export function WorldMap({
     markersLayerRef.current = L.layerGroup().addTo(map)
     webcamLayerRef.current = L.layerGroup().addTo(map)
 
-    const worldAtlas = landTopology as unknown as { objects: { land: unknown } }
-    const landGeoJson = feature(worldAtlas as never, worldAtlas.objects.land as never)
-    landMaskLayerRef.current = L.geoJSON(landGeoJson as GeoJSON.GeoJsonObject, {
-      pane: 'landMaskPane',
-      interactive: false,
-      style: {
-        fillColor: '#233745',
-        fillOpacity: 0.92,
-        color: 'rgba(118, 214, 255, 0.22)',
-        weight: 0.45,
-      },
-    }).addTo(map)
-
     mapRef.current = map
     visibleSpotUpdater()
 
     return () => {
       cleanupVelocityLayer(map, velocityLayerRef.current)
       velocityLayerRef.current = null
-      landMaskLayerRef.current?.remove()
       map.remove()
       mapRef.current = null
     }
@@ -192,9 +176,9 @@ export function WorldMap({
     velocityLayerRef.current = null
 
     const zoom = map.getZoom()
-    const particleMultiplier = Math.min(0.02, 0.004 + Math.max(zoom - 2, 0) * 0.002)
-    const lineWidth = Math.min(4.4, 2.4 + Math.max(zoom - 2, 0) * 0.24)
-    const particleAge = Math.max(18, 42 - Math.max(zoom - 2, 0) * 2)
+    const particleMultiplier = Math.min(0.008, 0.0015 + Math.max(zoom - 2, 0) * 0.0009)
+    const lineWidth = Math.min(2.4, 1.2 + Math.max(zoom - 2, 0) * 0.14)
+    const particleAge = Math.max(16, 28 - Math.max(zoom - 2, 0))
 
     const velocityLayer = velocityLeaflet.velocityLayer({
       data: velocityDataRef.current,
@@ -206,7 +190,7 @@ export function WorldMap({
       particleMultiplier,
       lineWidth,
       colorScale: ['#16324f', '#1b4d70', '#23769c', '#2ca7d8', '#83d9ea'],
-      frameRate: 24,
+      frameRate: 16,
       particleAge,
       fadeOpacity: 0.97,
       animationDuration: 0,
@@ -230,10 +214,13 @@ export function WorldMap({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !velocityReady) return
-    const refreshAfterInteraction = () => {
+    const handleMoveEnd = () => {
+      visibleSpotUpdater()
+    }
+    const handleZoomEnd = () => {
       visibleSpotUpdater()
       if (interactionTimerRef.current !== null) window.clearTimeout(interactionTimerRef.current)
-      interactionTimerRef.current = window.setTimeout(() => mountVelocityLayer(), 100)
+      interactionTimerRef.current = window.setTimeout(() => mountVelocityLayer(), 120)
     }
     const showPointData = (event: L.LeafletMouseEvent) => {
       const nearestPoint = nearestFieldPoint(event.latlng.lat, event.latlng.lng)
@@ -246,12 +233,12 @@ export function WorldMap({
         )
         .openOn(map)
     }
-    map.on('zoomend', refreshAfterInteraction)
-    map.on('moveend', refreshAfterInteraction)
+    map.on('zoomend', handleZoomEnd)
+    map.on('moveend', handleMoveEnd)
     map.on('click', showPointData)
     return () => {
-      map.off('zoomend', refreshAfterInteraction)
-      map.off('moveend', refreshAfterInteraction)
+      map.off('zoomend', handleZoomEnd)
+      map.off('moveend', handleMoveEnd)
       map.off('click', showPointData)
       if (interactionTimerRef.current !== null) {
         window.clearTimeout(interactionTimerRef.current)
@@ -268,7 +255,11 @@ export function WorldMap({
     layer.clearLayers()
     webcamLayer.clearLayers()
 
-    spotCatalog.forEach((spot) => {
+    const spotsToRender = renderBounds
+      ? spotCatalog.filter((spot) => spot.id === selectedSpotId || renderBounds.contains([spot.latitude, spot.longitude]))
+      : spotCatalog.filter((spot) => spot.id === selectedSpotId).concat(spotCatalog.slice(0, 300))
+
+    spotsToRender.forEach((spot) => {
       const summary = summaryById.get(spot.id)
       const isSelected = spot.id === selectedSpotId
       const webcamLine = spot.webcamUrl ? `<br/><a href="${spot.webcamUrl}" target="_blank" rel="noreferrer">Open public webcam</a>` : ''
@@ -316,9 +307,7 @@ export function WorldMap({
         webcamMarker.addTo(webcamLayer)
       }
     })
-
-    visibleSpotUpdater()
-  }, [onSelectSpot, selectedSpotId, spotCatalog, summaryById, visibleSpotUpdater])
+  }, [onSelectSpot, renderBounds, selectedSpotId, spotCatalog, summaryById, visibleSpotUpdater])
 
   const best = [...summaryById.values()].sort((a, b) => b.current.score - a.current.score)[0]
 
